@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:excel/excel.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:todolist_app/create_task_dialog.dart';
 import 'package:todolist_app/main.dart';
@@ -602,11 +603,11 @@ class _FolderDetailViewState extends State<FolderDetailView> {
                 ),
                 Text(
                   task.updatedAt != null
-                      ? 'Last Edited: ${task.updatedAt!.toLocal()}'
-                      : 'Created: ${task.createdAt?.toLocal()}',
+                      ? 'Last Edit: ${DateFormat('hh:mm a').format(task.updatedAt!)}'
+                      : 'No edits yet',
                   style: TextStyle(
-                    fontSize: 14,
-                    color: task.isDone ? widget.color : Colors.red,
+                    fontSize: 12,
+                    color: Colors.grey,
                   ),
                 ),
               ],
