@@ -241,6 +241,7 @@ class _FolderDetailViewState extends State<FolderDetailView> {
       note: taskData['note'] ?? '',
       status: taskData['status'] ?? TaskStatus.pending,
       date: taskDate,
+      createdAt: DateTime.now(),
     );
 
     setState(() {
@@ -277,6 +278,7 @@ class _FolderDetailViewState extends State<FolderDetailView> {
           note: result['note'] ?? '',
           status: result['status'] ?? TaskStatus.pending,
           date: result['date'],
+          updatedAt: DateTime.now(),
         );
         if (editedTask.date.isBefore(DateTime.now()) && !editedTask.isDone) {
           lateTasks.add(editedTask);
@@ -599,7 +601,9 @@ class _FolderDetailViewState extends State<FolderDetailView> {
                   ),
                 ),
                 Text(
-                  task.time,
+                  task.updatedAt != null
+                      ? 'Last Edited: ${task.updatedAt!.toLocal()}'
+                      : 'Created: ${task.createdAt?.toLocal()}',
                   style: TextStyle(
                     fontSize: 14,
                     color: task.isDone ? widget.color : Colors.red,
