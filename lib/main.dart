@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:todolist_app/task.dart';
 
 import './animated_menu_button.dart';
 import './folder_card.dart';
@@ -17,7 +19,7 @@ class FolderData {
   final String title;
   final IconData icon;
   final Color color;
-  final int tasks;
+  late final int tasks;
 
   FolderData({
     required this.title,
@@ -185,23 +187,26 @@ class _CreateFolderDialogState extends State<CreateFolderDialog> {
                 itemCount: _availableIcons.length,
                 itemBuilder: (context, index) {
                   final icon = _availableIcons[index];
-                  return IconButton(
-                    onPressed: () {
+                  return GestureDetector(
+                    onTap: () {
                       setState(() {
                         _selectedIcon = icon;
                       });
                     },
-                    icon: Icon(
-                      icon,
-                      color:
-                          icon == _selectedIcon ? _selectedColor : Colors.grey,
-                    ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: icon == _selectedIcon
-                          ? _selectedColor.withOpacity(0.1)
-                          : null,
-                      shape: RoundedRectangleBorder(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: icon == _selectedIcon
+                            ? _selectedColor.withOpacity(0.1)
+                            : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          icon,
+                          color: icon == _selectedIcon
+                              ? _selectedColor
+                              : Colors.grey,
+                        ),
                       ),
                     ),
                   );
@@ -304,51 +309,85 @@ class _CreateFolderDialogState extends State<CreateFolderDialog> {
 
 class _FolderListPageState extends State<FolderListPage> {
   List<FolderData> _folderLists = [];
-  late int totalTasks;
+  late int totalTasks = 0;
+  bool isMenuOpen = false;
+  late List<Task> lateTasks;
+  late List<Task> todayTasks;
+  late List<Task> doneTasks;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadFolders();
-    _loadTotalTasks();
-  }
-
-  void _loadTotalTasks() async {
-    final loadedTotalTasks = await loadTotalTasks();
-    setState(() {
-      totalTasks = loadedTotalTasks;
-    });
+  int _calculateTotalTasks() {
+    return _folderLists.fold(0, (sum, folder) => sum + folder.tasks);
   }
 
   Future<void> saveFolders(List<FolderData> folders) async {
     final prefs = await SharedPreferences.getInstance();
+
+    final totalTasks = folders
+        .where((folder) => folder.title != "All")
+        .map((folder) => folder.tasks)
+        .fold(0, (sum, tasks) => sum + tasks);
+
+    final allFolderIndex =
+        folders.indexWhere((folder) => folder.title == "All");
+    if (allFolderIndex != -1) {
+      folders[allFolderIndex] =
+          folders[allFolderIndex].copyWith(tasks: totalTasks);
+    }
+
     final folderJsonList = folders.map((folder) => folder.toJson()).toList();
     final jsonData = jsonEncode(folderJsonList);
-    await prefs.setString('folders', jsonData);
 
-    int totalTasks = folders.fold(0, (sum, folder) => sum + folder.tasks);
+    await prefs.setString('folders', jsonData);
     await prefs.setInt('totalTasks', totalTasks);
 
     setState(() {
+      _folderLists = folders;
       this.totalTasks = totalTasks;
     });
-  }
-
-  Future<int> loadTotalTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt('totalTasks') ?? 0;
   }
 
   Future<List<FolderData>> loadFolders() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonData = prefs.getString('folders');
+    List<FolderData> folderList = [];
+
     if (jsonData != null) {
       final List<dynamic> decodedData = jsonDecode(jsonData);
-      return decodedData
+      folderList = decodedData
           .map((json) => FolderData.fromJson(json as Map<String, dynamic>))
           .toList();
     }
-    return [];
+
+    // Calculate total tasks from all folders except "All"
+    final totalTasks = folderList
+        .where((folder) => folder.title != "All")
+        .map((folder) => folder.tasks)
+        .fold(0, (sum, tasks) => sum + tasks);
+
+    // Check if "All" folder exists
+    final index = folderList.indexWhere((folder) => folder.title == "All");
+
+    if (index == -1) {
+      // If "All" folder doesn't exist, add it
+      folderList.add(FolderData(
+        title: "All",
+        icon: Icons.folder,
+        color: Colors.redAccent,
+        tasks: totalTasks,
+      ));
+    } else {
+      // Update the existing "All" folder with the total tasks
+      folderList[index] = folderList[index].copyWith(tasks: totalTasks);
+    }
+
+    // Ensure "All" is always first
+    folderList.sort((a, b) {
+      if (a.title == "All") return -1;
+      if (b.title == "All") return 1;
+      return 0;
+    });
+
+    return folderList;
   }
 
   void _loadFolders() async {
@@ -361,6 +400,11 @@ class _FolderListPageState extends State<FolderListPage> {
   void _addNewFolder(FolderData newFolder) async {
     setState(() {
       _folderLists.add(newFolder);
+      _folderLists.sort((a, b) {
+        if (a.title == "All") return -1;
+        if (b.title == "All") return 1;
+        return 0;
+      });
     });
     await saveFolders(_folderLists);
     _loadFolders();
@@ -411,79 +455,107 @@ class _FolderListPageState extends State<FolderListPage> {
       ),
     );
 
-    if (result == true) {
-      _loadFolders();
+    if (result != null) {
+      if (result is int) {
+        setState(() {
+          totalTasks = result;
+        });
+      }
+
+      if (result == true) {
+        _loadFolders();
+      }
     }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFolders();
   }
 
   @override
   Widget build(BuildContext context) {
     final screenType = getScreenType(context);
-
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AnimatedMenuButton(
-                onFolderCreated: (folder) {
-                  _addNewFolder(folder);
-                  _loadFolders();
-                },
-                onFolderEdit: (folder) {
-                  _loadFolders();
-                },
-                currentFolders: [],
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Lists',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
+    return GestureDetector(
+      onTap: () {
+        if (isMenuOpen) {
+          setState(() {
+            isMenuOpen = false;
+          });
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.grey[100],
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AnimatedMenuButton(
+                  onFolderCreated: (folder) {
+                    _addNewFolder(folder);
+                    _loadFolders();
+                  },
+                  onFolderEdit: (folder) {
+                    _loadFolders();
+                  },
+                  currentFolders: _folderLists,
+                  onMenuToggle: (isOpen) {
+                    setState(() {
+                      isMenuOpen = isOpen;
+                    });
+                  },
+                  folderLists: _folderLists,
                 ),
-              ),
-              const SizedBox(height: 24),
-              Expanded(
-                child: _folderLists.isEmpty
-                    ? _buildEmptyState()
-                    : LayoutBuilder(
-                        builder: (context, constraints) {
-                          int crossAxisCount = 2;
-                          if (screenType == ScreenType.tablet) {
-                            crossAxisCount = 3;
-                          } else if (screenType == ScreenType.desktop) {
-                            crossAxisCount = 4;
-                          }
-                          return GridView.builder(
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: crossAxisCount,
-                              crossAxisSpacing: 16,
-                              mainAxisSpacing: 16,
-                              childAspectRatio: 1.1,
-                            ),
-                            itemCount: _folderLists.length,
-                            itemBuilder: (context, index) {
-                              final folder = _folderLists[index];
-                              return FolderCard(
-                                title: folder.title,
-                                tasks: folder.tasks,
-                                icon: folder.icon,
-                                color: folder.color,
-                                totalTasks: totalTasks,
-                                folder: folder,
-                                onTap: () => _openFolderDetail(folder),
-                              );
-                            },
-                          );
-                        },
-                      ),
-              ),
-            ],
+                const SizedBox(height: 24),
+                const Text(
+                  'List Folders',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: _folderLists.isEmpty
+                      ? _buildEmptyState()
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            int crossAxisCount = 2;
+                            if (screenType == ScreenType.tablet) {
+                              crossAxisCount = 3;
+                            } else if (screenType == ScreenType.desktop) {
+                              crossAxisCount = 4;
+                            }
+                            return GridView.builder(
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: crossAxisCount,
+                                crossAxisSpacing: 16,
+                                mainAxisSpacing: 16,
+                                childAspectRatio: 1.1,
+                              ),
+                              itemCount: _folderLists.length,
+                              itemBuilder: (context, index) {
+                                final folder = _folderLists[index];
+                                return FolderCard(
+                                  title: folder.title,
+                                  tasks: folder.tasks,
+                                  icon: folder.icon,
+                                  color: folder.color,
+                                  totalTasks: totalTasks,
+                                  folder: folder,
+                                  onTap: () => _openFolderDetail(folder),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -491,39 +563,47 @@ class _FolderListPageState extends State<FolderListPage> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.folder_outlined,
-            size: 64,
-            color: Colors.grey[400],
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[300]!,
+      highlightColor: Colors.grey[100]!,
+      child: Container(
+        height: 60,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                color: Colors.white,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: 120,
+                height: 20,
+                color: Colors.white,
+              ),
+              const Spacer(),
+              Container(
+                width: 80,
+                height: 16,
+                color: Colors.white,
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            'No folders',
-            style: TextStyle(
-              fontSize: 20,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Create a new folder to get started',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[500],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
 void main() {
+  // debugPaintSizeEnabled = true;
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
     home: FolderListPage(),

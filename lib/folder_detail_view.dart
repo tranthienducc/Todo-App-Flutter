@@ -1,13 +1,12 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
-import 'package:excel/excel.dart';
-import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:todolist_app/create_task_dialog.dart';
+import 'package:todolist_app/excel_helper.dart';
 import 'package:todolist_app/main.dart';
+import 'package:todolist_app/platform_utils.dart';
 import 'package:todolist_app/task_status.dart';
 
 import './task.dart';
@@ -60,6 +59,27 @@ class _FolderDetailViewState extends State<FolderDetailView> {
   late int totalTasks = 0;
   late int tasks = 0;
   late final Function editFolder;
+  late final TaskStatus _status = TaskStatus.TODO;
+  final Map<TaskStatus, Color> statusColors = {
+    TaskStatus.TODO: Colors.blue,
+    TaskStatus.INPROGRESS: Colors.orange,
+    TaskStatus.PENDING: Colors.purple,
+    TaskStatus.DONE: Colors.green,
+  };
+
+  void _updateTaskLists() {
+    final now = DateTime.now();
+
+    setState(() {
+      todayTasks.removeWhere((task) {
+        if (task.date.isBefore(DateTime(now.year, now.month, now.day))) {
+          lateTasks.add(task);
+          return true;
+        }
+        return false;
+      });
+    });
+  }
 
   @override
   void initState() {
@@ -67,6 +87,7 @@ class _FolderDetailViewState extends State<FolderDetailView> {
     lateTasks = [];
     todayTasks = [];
     doneTasks = [];
+    _loadTasks().then((_) => _updateTaskLists());
     title = widget.title;
     icon = widget.icon;
     color = widget.color;
@@ -81,25 +102,36 @@ class _FolderDetailViewState extends State<FolderDetailView> {
 
   Future<void> _loadTasks() async {
     final prefs = await SharedPreferences.getInstance();
-    final String? tasksJson = prefs.getString('tasks_${widget.title}');
+    List<Task> allTasks = [];
 
-    if (tasksJson != null) {
-      final List<dynamic> decodedTasks = json.decode(tasksJson);
-      final List<Task> allTasks =
-          decodedTasks.map((tasksJson) => Task.fromJson(tasksJson)).toList();
-
-      setState(() {
-        lateTasks = allTasks
-            .where((task) => task.date.isBefore(DateTime.now()) && !task.isDone)
-            .toList();
-        todayTasks = allTasks
-            .where(
-                (task) => !task.date.isBefore(DateTime.now()) && !task.isDone)
-            .toList();
-        doneTasks = allTasks.where((task) => task.isDone).toList();
-        totalTasks = allTasks.length;
-      });
+    if (title == "All") {
+      for (var folder in widget.folderLists) {
+        final String? tasksJson = prefs.getString('tasks_${folder.title}');
+        if (tasksJson != null) {
+          final List<dynamic> decodedTasks = json.decode(tasksJson);
+          allTasks.addAll(
+              decodedTasks.map((taskJson) => Task.fromJson(taskJson)).toList());
+        }
+      }
+    } else {
+      final String? tasksJson = prefs.getString('tasks_${widget.title}');
+      if (tasksJson != null) {
+        final List<dynamic> decodedTasks = json.decode(tasksJson);
+        allTasks =
+            decodedTasks.map((taskJson) => Task.fromJson(taskJson)).toList();
+      }
     }
+
+    setState(() {
+      lateTasks = allTasks
+          .where((task) => task.date.isBefore(DateTime.now()) && !task.isDone)
+          .toList();
+      todayTasks = allTasks
+          .where((task) => !task.date.isBefore(DateTime.now()) && !task.isDone)
+          .toList();
+      doneTasks = allTasks.where((task) => task.isDone).toList();
+      totalTasks = allTasks.length;
+    });
   }
 
   void _moveTaskToFolder(Task task, FolderData targetFolder) async {
@@ -107,7 +139,7 @@ class _FolderDetailViewState extends State<FolderDetailView> {
       lateTasks.remove(task);
       todayTasks.remove(task);
       doneTasks.remove(task);
-      _saveTasks();
+      saveTasks();
     });
 
     final prefs = await SharedPreferences.getInstance();
@@ -179,7 +211,7 @@ class _FolderDetailViewState extends State<FolderDetailView> {
     );
   }
 
-  Future<void> _saveTasks() async {
+  Future<void> saveTasks() async {
     final prefs = await SharedPreferences.getInstance();
     final allTasks = [...lateTasks, ...todayTasks, ...doneTasks];
 
@@ -189,25 +221,22 @@ class _FolderDetailViewState extends State<FolderDetailView> {
 
     int newTaskCount = allTasks.length;
 
-    final updatedFolder = widget.folder.copyWith(tasks: newTaskCount);
-
-    final foldersJson = prefs.getString('folders') ?? '[]';
-    final List<dynamic> folderList = jsonDecode(foldersJson);
-
-    List<FolderData> folderDataList =
-        folderList.map((folder) => FolderData.fromJson(folder)).toList();
-
-    int folderIndex = folderDataList.indexWhere((f) => f.title == widget.title);
+    int folderIndex =
+        widget.folderLists.indexWhere((folder) => folder.title == widget.title);
     if (folderIndex != -1) {
-      folderDataList[folderIndex] = updatedFolder;
+      final updatedFolder =
+          widget.folderLists[folderIndex].copyWith(tasks: newTaskCount);
+      widget.folderLists[folderIndex] = updatedFolder;
+
       await prefs.setString('folders',
-          jsonEncode(folderDataList.map((f) => f.toJson()).toList()));
+          jsonEncode(widget.folderLists.map((f) => f.toJson()).toList()));
+      widget.saveFolders(widget.folderLists);
     }
   }
 
   @override
   void dispose() {
-    Navigator.pop(context, totalTasks);
+    Navigator.pop(context, widget.folder.tasks);
     super.dispose();
   }
 
@@ -217,99 +246,112 @@ class _FolderDetailViewState extends State<FolderDetailView> {
       sourceList.remove(task);
       task.isDone = !task.isDone;
       targetList.add(task);
-      _saveTasks();
+      saveTasks();
     });
   }
 
   void _addNewTask(Map<String, dynamic> taskData) {
-    final now = DateTime.now();
     final taskDate = taskData['date'] as DateTime;
     final taskTime = taskData['time'] as TimeOfDay;
 
-    void _updateTotalTasks() {
-      int newTotalTasks =
-          widget.folderLists.fold(0, (sum, folder) => sum + folder.tasks);
-
-      widget.saveFolders(widget.folderLists);
-
-      Navigator.pop(context, newTotalTasks);
-    }
-
     final task = Task(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
       title: taskData['task'],
       time: taskTime.format(context),
       isDone: false,
       note: taskData['note'] ?? '',
-      status: taskData['status'] ?? TaskStatus.pending,
+      status: taskData['status'] ?? TaskStatus.PENDING,
       date: taskDate,
       createdAt: DateTime.now(),
     );
 
     setState(() {
-      if (taskDate.isBefore(now)) {
-        lateTasks.add(task);
-      } else {
-        todayTasks.add(task);
+      todayTasks.add(task);
+      totalTasks = lateTasks.length + todayTasks.length + doneTasks.length;
+
+      int folderIndex = widget.folderLists
+          .indexWhere((folder) => folder.title == widget.title);
+
+      if (folderIndex != -1) {
+        final updatedFolder =
+            widget.folderLists[folderIndex].copyWith(tasks: totalTasks);
+        widget.folderLists[folderIndex] = updatedFolder;
+
+        widget.saveFolders(widget.folderLists);
       }
-      _saveTasks();
-      _updateTotalTasks();
+
+      saveTasks();
+    });
+  }
+
+  void _deleteTask(Task task) {
+    setState(() {
+      lateTasks.removeWhere((t) => t.id == task.id);
+      todayTasks.removeWhere((t) => t.id == task.id);
+      doneTasks.removeWhere((t) => t.id == task.id);
+
+      totalTasks = lateTasks.length + todayTasks.length + doneTasks.length;
+
+      int folderIndex = widget.folderLists
+          .indexWhere((folder) => folder.title == widget.title);
+      if (folderIndex != -1) {
+        final updatedFolder =
+            widget.folderLists[folderIndex].copyWith(tasks: totalTasks);
+        widget.folderLists[folderIndex] = updatedFolder;
+
+        widget.saveFolders(widget.folderLists);
+      }
+
+      saveTasks();
     });
 
-    widget.currentFolders.tasks++;
-    widget.saveFolders(widget.folderLists);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Đã xóa task "${task.title}"')),
+    );
   }
 
   void _editTask(Task task) async {
     final result = await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => CreateTaskDialog(task),
+        builder: (context) => CreateTaskDialog(task, _status, statusColors),
         fullscreenDialog: true,
       ),
     );
+
     if (result != null) {
       setState(() {
-        lateTasks.removeWhere((t) => t.title == task.title);
-        todayTasks.removeWhere((t) => t.title == task.title);
-        doneTasks.removeWhere((t) => t.title == task.title);
+        lateTasks.removeWhere((t) => t.id == task.id);
+        todayTasks.removeWhere((t) => t.id == task.id);
+        doneTasks.removeWhere((t) => t.id == task.id);
 
         final editedTask = Task(
+          id: task.id,
           title: result['task'],
           time: result['time'].format(context),
           isDone: task.isDone,
           note: result['note'] ?? '',
-          status: result['status'] ?? TaskStatus.pending,
+          status: result['status'] ?? TaskStatus.PENDING,
           date: result['date'],
+          createdAt: task.createdAt,
           updatedAt: DateTime.now(),
         );
-        if (editedTask.date.isBefore(DateTime.now()) && !editedTask.isDone) {
-          lateTasks.add(editedTask);
-        } else if (!editedTask.isDone) {
+
+        if (!editedTask.isDone) {
           todayTasks.add(editedTask);
         } else {
           doneTasks.add(editedTask);
         }
-        _saveTasks();
+
+        saveTasks();
       });
     }
   }
 
-  void _deleteTask(Task task) async {
-    setState(() {
-      lateTasks.removeWhere((t) => t.title == task.title);
-      todayTasks.removeWhere((t) => t.title == task.title);
-      doneTasks.removeWhere((t) => t.title == task.title);
-
-      widget.currentFolders.tasks--;
-      widget.saveFolders(widget.folderLists);
-    });
-    await _saveTasks();
-  }
-
   Future<void> _deleteFolder() async {
-    final prefs = await SharedPreferences.getInstance();
+    final int totalTasksInFolder =
+        lateTasks.length + todayTasks.length + doneTasks.length;
 
-    String? tasksJson = prefs.getString('tasks_${folder.title}');
-    if (tasksJson != null && tasksJson.isNotEmpty) {
+    if (totalTasksInFolder > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -319,6 +361,8 @@ class _FolderDetailViewState extends State<FolderDetailView> {
       );
       return;
     }
+
+    final prefs = await SharedPreferences.getInstance();
 
     await prefs.remove('tasks_${folder.title}');
 
@@ -336,161 +380,128 @@ class _FolderDetailViewState extends State<FolderDetailView> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Đã xóa thư mục "${folder.title}"')),
     );
+
     await _loadTasks();
     await widget.loadFolders();
   }
 
-  Future<void> _exportExcel() async {
-    if (lateTasks.isEmpty && todayTasks.isEmpty && doneTasks.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Không có task nào để xuất')),
-      );
-      return;
-    }
+  void _sortTasksByStatus(List<Task> tasks) {
+    tasks.sort((a, b) => a.status.index.compareTo(b.status.index));
+  }
 
-    try {
-      var excel = Excel.createExcel();
-
-      var folderSheet = excel['Folder Information'];
-      folderSheet.appendRow([
-        TextCellValue("Tên Thư Mục"),
-        TextCellValue("Tổng Số Task"),
-        TextCellValue("Task Quá Hạn"),
-        TextCellValue("Task Hôm Nay"),
-        TextCellValue("Task Đã Hoàn Thành"),
-      ]);
-      folderSheet.appendRow([
-        TextCellValue(widget.title),
-        TextCellValue(totalTasks.toString()),
-        TextCellValue(lateTasks.length.toString()),
-        TextCellValue(todayTasks.length.toString()),
-        TextCellValue(doneTasks.length.toString()),
-      ]);
-
-      var taskSheet = excel['Tasks'];
-      taskSheet.appendRow([
-        TextCellValue("Tiêu Đề"),
-        TextCellValue("Ngày"),
-        TextCellValue("Giờ"),
-        TextCellValue("Trạng Thái"),
-        TextCellValue("Ghi Chú"),
-        TextCellValue("Thư Mục"),
-      ]);
-
-      final allTasks = [...lateTasks, ...todayTasks, ...doneTasks];
-      for (var task in allTasks) {
-        taskSheet.appendRow([
-          TextCellValue(task.title),
-          TextCellValue(task.date.toString().split(' ')[0]),
-          TextCellValue(task.time),
-          TextCellValue(task.isDone ? 'Đã Hoàn Thành' : 'Chưa Hoàn Thành'),
-          TextCellValue(task.note ?? ''),
-          TextCellValue(widget.title),
-        ]);
-      }
-
-      Uint8List? excelBytes = Uint8List.fromList(excel.save() ?? []);
-
-      if (excelBytes.isNotEmpty) {
-        String fileName = '${widget.title}_tasks';
-        if (!fileName.endsWith('.xlsx')) {
-          fileName += '.xlsx';
-        }
-
-        await FileSaver.instance.saveFile(
-          name: fileName,
-          bytes: excelBytes,
-          ext: 'xlsx',
-          mimeType: MimeType.microsoftExcel,
-        );
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Xuất Task thành công')),
-        );
-      } else {
-        throw Exception('Không thể tạo file Excel');
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Xuất thất bại: $e')),
-      );
-    }
+  void _sortTasksByUpdateTime(List<Task> tasks) {
+    tasks.sort((a, b) {
+      final aUpdatedAt = a.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bUpdatedAt = b.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bUpdatedAt.compareTo(aUpdatedAt);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    bool isMobile =
+        MediaQuery.of(context).size.width < 600; // Kiểm tra nếu là mobile
+    bool isDesktop = PlatformUtil.isDesktopPlatform; // Kiểm tra nếu là desktop
+
     return Scaffold(
       backgroundColor: widget.color,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            onSelected: (String result) async {
-              if (result == 'edit') {
-                await widget.editFolder(widget.folder);
-                setState(() {
-                  title = widget.folder.title;
-                  icon = widget.folder.icon;
-                  color = widget.folder.color;
-                });
-                Navigator.pop(context, true);
-              } else if (result == 'delete') {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Delete Folder'),
-                    content: const Text(
-                        'Are you sure you want to delete this folder?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          Navigator.of(context).pop();
-                          await _deleteFolder();
-                        },
-                        child: const Text('Delete'),
-                      ),
-                    ],
-                  ),
-                );
-              } else if (result == 'exportExcel') {
-                await _exportExcel();
-              }
-            },
-            itemBuilder: (BuildContext context) {
-              return [
-                const PopupMenuItem<String>(
-                  value: 'edit',
-                  child: Text('Edit Folder'),
+      appBar: (widget.title == 'All' && isMobile)
+          ? AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ))
+          : AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+              actions: [
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Colors.white),
+                  onSelected: (String result) async {
+                    if (result == 'edit') {
+                      await widget.editFolder(widget.folder);
+                      setState(() {
+                        title = widget.folder.title;
+                        icon = widget.folder.icon;
+                        color = widget.folder.color;
+                      });
+                      Navigator.pop(context, true);
+                    } else if (result == 'delete') {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Delete Folder'),
+                          content: const Text(
+                              'Are you sure you want to delete this folder?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                Navigator.of(context).pop();
+                                await _deleteFolder();
+                              },
+                              child: const Text('Delete'),
+                            ),
+                          ],
+                        ),
+                      );
+                    } else if (result == 'exportExcel') {
+                      if (widget.title == 'All') {
+                        await exportTasksToExcel(
+                          context: context,
+                          folderTitle: widget.title,
+                          totalTasks: totalTasks,
+                          lateTasks: lateTasks,
+                          todayTasks: todayTasks,
+                          doneTasks: doneTasks,
+                        );
+                      }
+                    }
+                  },
+                  itemBuilder: (BuildContext context) {
+                    List<PopupMenuEntry<String>> menuItems = [];
+
+                    // Chỉ hiển thị "Export to Excel" nếu là desktop và folder là "All"
+                    if (widget.title == 'All' && isDesktop) {
+                      menuItems.add(
+                        const PopupMenuItem<String>(
+                          value: 'exportExcel',
+                          child: Row(
+                            children: [
+                              Icon(Icons.file_download),
+                              SizedBox(width: 8),
+                              Text('Export to Excel'),
+                            ],
+                          ),
+                        ),
+                      );
+                    } else if (widget.title != 'All') {
+                      menuItems.addAll([
+                        const PopupMenuItem<String>(
+                          value: 'edit',
+                          child: Text('Edit Folder'),
+                        ),
+                        const PopupMenuItem<String>(
+                          value: 'delete',
+                          child: Text('Delete Folder'),
+                        ),
+                      ]);
+                    }
+
+                    return menuItems;
+                  },
                 ),
-                const PopupMenuItem<String>(
-                  value: 'delete',
-                  child: Text('Delete Folder'),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'exportExcel',
-                  child: Row(
-                    children: [
-                      Icon(Icons.file_download),
-                      SizedBox(width: 8),
-                      Text('Export to Excel'),
-                    ],
-                  ),
-                ),
-              ];
-            },
-          ),
-        ],
-      ),
+              ],
+            ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -549,7 +560,16 @@ class _FolderDetailViewState extends State<FolderDetailView> {
         onPressed: () async {
           final result = await Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (context) => const CreateTaskDialog(null),
+              builder: (context) => const CreateTaskDialog(
+                null,
+                TaskStatus.TODO,
+                {
+                  TaskStatus.TODO: Colors.blue,
+                  TaskStatus.INPROGRESS: Colors.orange,
+                  TaskStatus.PENDING: Colors.purple,
+                  TaskStatus.DONE: Colors.green,
+                },
+              ),
               fullscreenDialog: true,
             ),
           );
@@ -565,16 +585,50 @@ class _FolderDetailViewState extends State<FolderDetailView> {
   }
 
   Widget _buildSection(String title, List<Task> tasks) {
+    if (title == 'Today') {
+      _updateTaskLists();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: TextStyle(
-            color: title == 'Done' ? widget.color : Colors.black54,
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                color: title == 'Done' ? widget.color : Colors.black54,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.sort, color: Colors.black54),
+              onSelected: (String result) {
+                if (result == 'sortByStatus') {
+                  setState(() {
+                    _sortTasksByStatus(tasks);
+                  });
+                } else if (result == 'sortByUpdateTime') {
+                  setState(() {
+                    _sortTasksByUpdateTime(tasks);
+                  });
+                }
+              },
+              itemBuilder: (BuildContext context) {
+                return [
+                  const PopupMenuItem<String>(
+                    value: 'sortByStatus',
+                    child: Text('Sort by Status'),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'sortByUpdateTime',
+                    child: Text('Sort by Update Time'),
+                  ),
+                ];
+              },
+            ),
+          ],
         ),
         const SizedBox(height: 10),
         ...tasks.map((task) => _buildTask(task, title)),
@@ -601,11 +655,40 @@ class _FolderDetailViewState extends State<FolderDetailView> {
                     decoration: task.isDone ? TextDecoration.lineThrough : null,
                   ),
                 ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Text(
+                      'Status: ',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blueGrey,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Container(
+                      width: 12,
+                      height: 12,
+                      margin: const EdgeInsets.only(right: 4),
+                      decoration: BoxDecoration(
+                        color: statusColors[task.status] ?? Colors.grey,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    Text(
+                      task.status.toString().split('.').last,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.blueGrey,
+                      ),
+                    ),
+                  ],
+                ),
                 Text(
                   task.updatedAt != null
                       ? 'Last Edit: ${DateFormat('hh:mm a').format(task.updatedAt!)}'
                       : 'No edits yet',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
                     color: Colors.grey,
                   ),
@@ -631,19 +714,19 @@ class _FolderDetailViewState extends State<FolderDetailView> {
               // Show confirmation dialog
               showDialog(
                 context: context,
-                builder: (BuildContext dialogContext) => AlertDialog(
+                builder: (context) => AlertDialog(
                   title: const Text('Delete Task'),
                   content:
                       const Text('Are you sure you want to delete this task?'),
                   actions: [
                     TextButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      onPressed: () => Navigator.of(context).pop(),
                       child: const Text('Cancel'),
                     ),
                     TextButton(
                       onPressed: () {
                         _deleteTask(task);
-                        Navigator.of(dialogContext).pop();
+                        Navigator.of(context).pop();
                       },
                       child: const Text('Delete'),
                     ),

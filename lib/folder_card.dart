@@ -21,7 +21,7 @@ class FolderCard extends StatelessWidget {
     this.color = Colors.grey,
     required this.onTap,
     this.folder,
-    this.totalTasks = 0,
+    required this.totalTasks,
     this.isLoading = false,
   });
 
@@ -32,7 +32,7 @@ class FolderCard extends StatelessWidget {
     }
 
     if (folder == null) {
-      return _buildNoFolderAvailable();
+      return const SizedBox.shrink();
     }
 
     return _buildFolderCard();
@@ -76,80 +76,53 @@ class FolderCard extends StatelessWidget {
     );
   }
 
-  Widget _buildNoFolderAvailable() {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Center(
-            child: Text(
-              'No folder available',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildFolderCard() {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                folder?.icon ?? icon,
-                size: 48,
-                color: color,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '$tasks Tasks',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
+      child: IntrinsicHeight(
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
               ),
             ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  folder?.icon ?? icon,
+                  size: 48,
+                  color: color,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '$tasks Tasks',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

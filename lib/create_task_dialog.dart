@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:todolist_app/note_dialog.dart';
 import 'package:todolist_app/task.dart';
 import 'package:todolist_app/task_status.dart';
 
 class CreateTaskDialog extends StatefulWidget {
   final Task? existingTask;
-  const CreateTaskDialog(this.existingTask, {super.key});
+  final TaskStatus _status;
+  final Map<TaskStatus, Color> statusColors;
+  const CreateTaskDialog(this.existingTask, this._status, this.statusColors,
+      {super.key});
   @override
   State<CreateTaskDialog> createState() => _CreateTaskDialogState();
 }
@@ -15,6 +19,7 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
   late TimeOfDay _selectedTime;
   late String _note;
   late TaskStatus _status;
+  late final Map<TaskStatus, Color> statusColors;
 
   TimeOfDay parseTimeOfDay(String timeString) {
     final RegExp timeFormat = RegExp(r'(\d+):(\d+)([APMapm]{2})');
@@ -48,20 +53,25 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
         ? parseTimeOfDay(widget.existingTask?.time ?? '')
         : TimeOfDay.now();
     _note = widget.existingTask?.note ?? '';
-    _status = widget.existingTask?.status ?? TaskStatus.todo;
+    _status = widget.existingTask?.status ?? TaskStatus.TODO;
+    statusColors = widget.statusColors;
   }
-
-  final Map<TaskStatus, Color> statusColors = {
-    TaskStatus.todo: Colors.blue,
-    TaskStatus.inProgress: Colors.orange,
-    TaskStatus.pending: Colors.purple,
-    TaskStatus.done: Colors.green,
-  };
 
   @override
   void dispose() {
     _taskController.dispose();
     super.dispose();
+  }
+
+  Future<void> _addNote(BuildContext context) async {
+    final String? note = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) => NoteDialog(initialNote: _note),
+    );
+
+    if (note != null && mounted) {
+      setState(() => _note = note);
+    }
   }
 
   @override
@@ -213,46 +223,12 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
         context: context,
         initialTime: _selectedTime,
       );
-      if (time != null) {
+      if (time != null && mounted) {
         setState(() {
           _selectedDate = date;
           _selectedTime = time;
         });
       }
-    }
-  }
-
-  Future<void> _addNote(BuildContext context) async {
-    final noteController = TextEditingController(text: _note);
-
-    try {
-      final String? note = await showDialog<String>(
-        context: context,
-        builder: (BuildContext dialogContext) => AlertDialog(
-          title: const Text('Add note'),
-          content: TextField(
-            controller: noteController,
-            decoration: const InputDecoration(hintText: 'Enter note'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () =>
-                  Navigator.pop(dialogContext, noteController.text),
-              child: const Text('Add'),
-            ),
-          ],
-        ),
-      );
-
-      if (note != null && note.isNotEmpty) {
-        setState(() => _note = note);
-      }
-    } finally {
-      noteController.dispose();
     }
   }
 
@@ -289,7 +265,7 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
       ),
     );
 
-    if (status != null) {
+    if (status != null && mounted) {
       setState(() => _status = status);
     }
   }
@@ -308,6 +284,7 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
       'time': _selectedTime,
       'note': _note,
       'status': _status,
+      'statusColor': statusColors[_status],
     };
 
     Navigator.of(context).pop(result);

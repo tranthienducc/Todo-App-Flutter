@@ -1,1 +1,1 @@
-enum TaskStatus { todo, inProgress, pending, done }
+enum TaskStatus { TODO, INPROGRESS, PENDING, DONE }

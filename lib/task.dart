@@ -1,6 +1,7 @@
 import 'package:todolist_app/task_status.dart';
 
 class Task {
+  String id;
   String title;
   String time;
   bool isDone;
@@ -11,6 +12,7 @@ class Task {
   DateTime? updatedAt;
 
   Task({
+    required this.id,
     required this.title,
     required this.time,
     required this.isDone,
@@ -23,6 +25,7 @@ class Task {
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'title': title,
       'time': time,
       'isDone': isDone,
@@ -36,15 +39,17 @@ class Task {
 
   factory Task.fromJson(Map<String, dynamic> json) {
     return Task(
+      id: json['id'],
       title: json['title'],
       time: json['time'],
       isDone: json['isDone'],
       note: json['note'],
       status: TaskStatus.values.firstWhere(
           (e) => e.toString() == json['status'],
-          orElse: () => TaskStatus.todo),
+          orElse: () => TaskStatus.TODO),
       date: DateTime.parse(json['date']),
-      createdAt: DateTime.parse(json['createdAt']),
+      createdAt:
+          json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
       updatedAt:
           json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : null,
     );
