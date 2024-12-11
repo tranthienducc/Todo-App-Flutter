@@ -9,12 +9,12 @@ class MoveTaskDialog extends StatelessWidget {
   final Function(String) onFolderSelected;
 
   const MoveTaskDialog({
-    Key? key,
+    super.key,
     required this.task,
     required this.folders,
     required this.currentFolder,
     required this.onFolderSelected,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

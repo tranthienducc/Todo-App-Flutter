@@ -10,6 +10,7 @@ import './task.dart';
 import 'excel_service.dart';
 import "main.dart";
 import 'platform_utils.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 class AnimatedMenuButton extends StatefulWidget {
   final Function(FolderData) onFolderCreated;
@@ -17,14 +18,20 @@ class AnimatedMenuButton extends StatefulWidget {
   final List<FolderData> currentFolders;
   final Function(bool isOpen) onMenuToggle;
   final List<FolderData> folderLists;
+  List<Task> lateTasks;
+  List<Task> todayTasks;
+  List<Task> doneTasks;
 
-  const AnimatedMenuButton({
+  AnimatedMenuButton({
     super.key,
     required this.onFolderCreated,
     required this.onFolderEdit,
     required this.currentFolders,
     required this.onMenuToggle,
     required this.folderLists,
+    this.lateTasks = const [],
+    this.todayTasks = const [],
+    this.doneTasks = const [],
   });
 
   @override
@@ -36,9 +43,6 @@ class _AnimatedMenuButtonState extends State<AnimatedMenuButton>
   late AnimationController _controller;
   bool _isOpen = false;
   final ExcelService _excelService = ExcelService();
-  late List<Task> lateTasks;
-  late List<Task> todayTasks;
-  late List<Task> doneTasks;
 
   @override
   void initState() {
@@ -104,7 +108,8 @@ class _AnimatedMenuButtonState extends State<AnimatedMenuButton>
         await sampleFile.writeAsBytes(excel.encode()!);
 
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Sample file created at: $sampleFilePath'),
+            content: Text(
+                AppLocalizations.of(context)!.sampleFileExcel(sampleFilePath)),
             backgroundColor: Colors.orange));
         return;
       }
@@ -112,8 +117,9 @@ class _AnimatedMenuButtonState extends State<AnimatedMenuButton>
           await _excelService.importFromExcel();
 
       if (importedData.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('No folders found in the Excel file'),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text(AppLocalizations.of(context)!.notFoundFolderFileExcel),
             backgroundColor: Colors.orange));
         return;
       }
@@ -126,6 +132,7 @@ class _AnimatedMenuButtonState extends State<AnimatedMenuButton>
         }
 
         FolderData newFolder = FolderData(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
             title: data['title'],
             color: data['color'] ?? Colors.blue.value,
             icon: data['icon'] ?? Icons.folder.codePoint);
@@ -134,118 +141,106 @@ class _AnimatedMenuButtonState extends State<AnimatedMenuButton>
       }
 
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Imported ${newFolders.length} folders'),
+          content: Text(
+              AppLocalizations.of(context)!.importFolder(newFolders.length)),
           backgroundColor:
               newFolders.isNotEmpty ? Colors.green : Colors.orange));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Import failed: $e'), backgroundColor: Colors.red));
+          content: Text(AppLocalizations.of(context)!.importFailed(e)),
+          backgroundColor: Colors.red));
     }
   }
 
+  void _toggleLanguage() {
+    final newLocale = FolderListPage.localeNotifier.value.languageCode == 'en'
+        ? const Locale('vi')
+        : const Locale('en');
+
+    FolderListPage.setLocale(context, newLocale);
+  }
+
   Future<void> _exportExcel() async {
-    try {
-      var excel = Excel.createExcel();
+    var excel = Excel.createExcel();
 
-      if (widget.folderLists.isEmpty ||
-          (lateTasks.isEmpty && todayTasks.isEmpty && doneTasks.isEmpty)) {
-        var folderSheet = excel['Folder Information'];
-        folderSheet.appendRow([
-          TextCellValue("Tên Thư Mục"),
-          TextCellValue("Tổng Số Task"),
-          TextCellValue("Task Quá Hạn"),
-          TextCellValue("Task Hôm Nay"),
-          TextCellValue("Task Đã Hoàn Thành")
-        ]);
-        folderSheet.appendRow([
-          TextCellValue("Chưa có dữ liệu"),
-          TextCellValue('0'),
-          TextCellValue('0'),
-          TextCellValue('0'),
-          TextCellValue('0')
-        ]);
+    var folderSheet = excel['Folder Information'];
+    folderSheet.appendRow([
+      TextCellValue("Tên Thư Mục"),
+      TextCellValue("Tổng Số Task"),
+      TextCellValue("Task Quá Hạn"),
+      TextCellValue("Task Hôm Nay"),
+      TextCellValue("Task Đã Hoàn Thành"),
+    ]);
 
-        var taskSheet = excel['Tasks'];
+    // Tạo sheet thông tin task
+    var taskSheet = excel['Tasks'];
+    taskSheet.appendRow([
+      TextCellValue("Tiêu Đề"),
+      TextCellValue("Ngày"),
+      TextCellValue("Giờ"),
+      TextCellValue("Trạng Thái"),
+      TextCellValue("Ghi Chú"),
+      TextCellValue("Thư Mục"),
+    ]);
+
+    if (widget.lateTasks.isEmpty &&
+        widget.todayTasks.isEmpty &&
+        widget.doneTasks.isEmpty) {
+      folderSheet.appendRow([
+        TextCellValue("Thư mục mẫu"),
+        TextCellValue("0"),
+        TextCellValue("0"),
+        TextCellValue("0"),
+        TextCellValue("0"),
+      ]);
+
+      taskSheet.appendRow([
+        TextCellValue("Task mẫu"),
+        TextCellValue("2024-01-01"),
+        TextCellValue("12:00"),
+        TextCellValue("Chưa Hoàn Thành"),
+        TextCellValue("Ghi chú mẫu"),
+        TextCellValue("Thư mục mẫu"),
+      ]);
+    } else {
+      final allTasks = [
+        ...widget.lateTasks,
+        ...widget.todayTasks,
+        ...widget.doneTasks
+      ];
+      for (var task in allTasks) {
         taskSheet.appendRow([
-          TextCellValue("Tiêu Đề"),
-          TextCellValue("Ngày"),
-          TextCellValue("Giờ"),
-          TextCellValue("Trạng Thái"),
-          TextCellValue("Ghi Chú"),
-          TextCellValue("Thư Mục")
+          TextCellValue(task.title),
+          TextCellValue(task.date.toString().split(' ')[0]),
+          TextCellValue(task.time),
+          TextCellValue(task.isDone ? 'Đã Hoàn Thành' : 'Chưa Hoàn Thành'),
+          TextCellValue(task.note ?? ''),
         ]);
-        taskSheet.appendRow([
-          TextCellValue("Chưa có dữ liệu"),
-          TextCellValue("Chưa có dữ liệu"),
-          TextCellValue("Chưa có dữ liệu"),
-          TextCellValue("Chưa có dữ liệu"),
-          TextCellValue("Chưa có dữ liệu"),
-          TextCellValue("Chưa có dữ liệu")
-        ]);
-      } else {
-        var folderSheet = excel['Folder Information'];
-        folderSheet.appendRow([
-          TextCellValue("Tên Thư Mục"),
-          TextCellValue("Tổng Số Task"),
-          TextCellValue("Task Quá Hạn"),
-          TextCellValue("Task Hôm Nay"),
-          TextCellValue("Task Đã Hoàn Thành")
-        ]);
-        folderSheet.appendRow([
-          TextCellValue(
-              lateTasks.map((toElement) => toElement.title) as String),
-          TextCellValue(lateTasks.length.toString()),
-          TextCellValue(todayTasks.length.toString()),
-          TextCellValue(doneTasks.length.toString())
-        ]);
-
-        var taskSheet = excel['Tasks'];
-        taskSheet.appendRow([
-          TextCellValue("Tiêu Đề"),
-          TextCellValue("Ngày"),
-          TextCellValue("Giờ"),
-          TextCellValue("Trạng Thái"),
-          TextCellValue("Ghi Chú"),
-          TextCellValue("Thư Mục")
-        ]);
-
-        final allTasks = [...lateTasks, ...todayTasks, ...doneTasks];
-        for (var task in allTasks) {
-          taskSheet.appendRow([
-            TextCellValue(task.title),
-            TextCellValue(task.date.toString().split(' ')[0]),
-            TextCellValue(task.time),
-            TextCellValue(task.isDone ? 'Đã Hoàn Thành' : 'Chưa Hoàn Thành'),
-            TextCellValue(task.note ?? ''),
-            TextCellValue(
-                lateTasks.map((toElement) => toElement.title) as String)
-          ]);
-        }
       }
+    }
 
-      Uint8List? excelBytes = Uint8List.fromList(excel.save() ?? []);
-      final taskTitle = lateTasks.map((toElement) => toElement.title);
+    List<int>? savedFile = excel.save();
+    if (savedFile == null) {
+      throw Exception("Excel file creation failed");
+    }
 
-      if (excelBytes.isNotEmpty) {
-        String fileName = '${taskTitle.isNotEmpty ? taskTitle : "tasks"}_tasks';
-        if (!fileName.endsWith('.xlsx')) {
-          fileName += '.xlsx';
-        }
+    Uint8List excelBytes = Uint8List.fromList(savedFile);
 
-        await FileSaver.instance.saveFile(
-            name: fileName,
-            bytes: excelBytes,
-            ext: 'xlsx',
-            mimeType: MimeType.microsoftExcel);
+    if (excelBytes.isNotEmpty) {
+      String fileName = 'template_or_tasks_export.xlsx';
+      await FileSaver.instance.saveFile(
+        name: fileName,
+        bytes: excelBytes,
+        ext: 'xlsx',
+        mimeType: MimeType.microsoftExcel,
+      );
 
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Xuất Task thành công')));
-      } else {
-        throw Exception('Không thể tạo file Excel');
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Xuất thất bại: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(AppLocalizations.of(context)!.exportExcelSuccess)),
+      );
+    } else {
+      throw Exception(AppLocalizations.of(context)!.errorExportExecl);
     }
   }
 
@@ -283,7 +278,7 @@ class _AnimatedMenuButtonState extends State<AnimatedMenuButton>
                   child: Container(
                     height: 80,
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
@@ -303,7 +298,7 @@ class _AnimatedMenuButtonState extends State<AnimatedMenuButton>
                           visible: _isOpen,
                           child: _buildActionButton(
                             icon: Icons.create,
-                            label: 'Create',
+                            label: AppLocalizations.of(context)!.createFolder,
                             onTap: () async {
                               _closeMenu();
                               final result = await showDialog<FolderData>(
@@ -315,6 +310,21 @@ class _AnimatedMenuButtonState extends State<AnimatedMenuButton>
                               if (result != null) {
                                 widget.onFolderCreated(result);
                               }
+                            },
+                          ),
+                        ),
+                        Visibility(
+                          visible: _isOpen,
+                          child: ValueListenableBuilder<Locale>(
+                            valueListenable: FolderListPage.localeNotifier,
+                            builder: (context, locale, _) {
+                              return _buildActionButton(
+                                icon: Icons.language,
+                                label: locale.languageCode == 'en'
+                                    ? 'Vietnamese'
+                                    : 'English',
+                                onTap: _toggleLanguage,
+                              );
                             },
                           ),
                         ),
@@ -340,7 +350,7 @@ class _AnimatedMenuButtonState extends State<AnimatedMenuButton>
                           visible: _isOpen,
                           child: _buildActionButton(
                             icon: Icons.settings,
-                            label: 'Setting',
+                            label: AppLocalizations.of(context)!.setting,
                             onTap: _closeMenu,
                           ),
                         ),
@@ -397,12 +407,12 @@ class _AnimatedMenuButtonState extends State<AnimatedMenuButton>
     required VoidCallback onTap,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12.0),
+      padding: const EdgeInsets.symmetric(horizontal: 6.0),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.all(3.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,

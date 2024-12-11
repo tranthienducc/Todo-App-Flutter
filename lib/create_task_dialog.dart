@@ -1,14 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:todolist_app/main.dart';
 import 'package:todolist_app/note_dialog.dart';
 import 'package:todolist_app/task.dart';
 import 'package:todolist_app/task_status.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 class CreateTaskDialog extends StatefulWidget {
   final Task? existingTask;
-  final TaskStatus _status;
-  final Map<TaskStatus, Color> statusColors;
-  const CreateTaskDialog(this.existingTask, this._status, this.statusColors,
-      {super.key});
+  FolderData? selectedFolder;
+  final Function? selectFolder;
+  TaskStatus status;
+  Map<TaskStatus, Color> statusColors;
+  List<FolderData> existingFolders;
+
+  CreateTaskDialog({
+    super.key,
+    this.selectedFolder,
+    required this.selectFolder,
+    required this.existingTask,
+    required this.status,
+    required this.statusColors,
+    required this.existingFolders,
+  });
+
   @override
   State<CreateTaskDialog> createState() => _CreateTaskDialogState();
 }
@@ -18,8 +32,6 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
   late DateTime _selectedDate;
   late TimeOfDay _selectedTime;
   late String _note;
-  late TaskStatus _status;
-  late final Map<TaskStatus, Color> statusColors;
 
   TimeOfDay parseTimeOfDay(String timeString) {
     final RegExp timeFormat = RegExp(r'(\d+):(\d+)([APMapm]{2})');
@@ -53,8 +65,8 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
         ? parseTimeOfDay(widget.existingTask?.time ?? '')
         : TimeOfDay.now();
     _note = widget.existingTask?.note ?? '';
-    _status = widget.existingTask?.status ?? TaskStatus.TODO;
-    statusColors = widget.statusColors;
+    widget.status = widget.existingTask?.status ?? TaskStatus.TODO;
+    widget.statusColors = widget.statusColors;
   }
 
   @override
@@ -76,6 +88,7 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
 
   @override
   Widget build(BuildContext context) {
+    print("Folder được chọn là: ${widget.selectedFolder}");
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -86,7 +99,9 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
           icon: const Icon(Icons.close, color: Colors.black),
         ),
         title: Text(
-          widget.existingTask == null ? 'New Task' : 'Edit Task',
+          widget.existingTask == null
+              ? AppLocalizations.of(context)!.newTask
+              : AppLocalizations.of(context)!.editTask,
           style: const TextStyle(
             fontSize: 16,
             color: Colors.black,
@@ -105,8 +120,8 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
                   TextField(
                     controller: _taskController,
                     style: const TextStyle(fontSize: 16),
-                    decoration: const InputDecoration(
-                      hintText: 'What are you planning?',
+                    decoration: InputDecoration(
+                      hintText: AppLocalizations.of(context)!.planing,
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.zero,
                     ),
@@ -138,9 +153,42 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
                             color: Colors.grey, size: 20),
                         const SizedBox(width: 10),
                         Text(
-                          _note.isEmpty ? 'Add note' : _note,
+                          _note.isEmpty
+                              ? AppLocalizations.of(context)!.addNote
+                              : _note,
                           style: TextStyle(
                             color: _note.isEmpty ? Colors.grey : Colors.black,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: () async {
+                      await widget.selectFolder!(context)
+                          .then((selectedFolder) {
+                        if (selectedFolder != null) {
+                          setState(() {
+                            widget.selectedFolder = selectedFolder;
+                          });
+                        }
+                      });
+                    },
+                    child: Row(
+                      children: [
+                        const Icon(Icons.folder_outlined,
+                            color: Colors.grey, size: 20),
+                        const SizedBox(width: 10),
+                        Text(
+                          widget.selectedFolder?.isEmpty ?? true
+                              ? AppLocalizations.of(context)!.selectFolder
+                              : widget.selectedFolder!.title,
+                          style: TextStyle(
+                            color: widget.selectedFolder?.title != null
+                                ? Colors.black
+                                : Colors.grey,
                             fontSize: 14,
                           ),
                         ),
@@ -153,7 +201,8 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
                     child: Row(
                       children: [
                         Icon(Icons.flag_outlined,
-                            color: statusColors[_status], size: 20),
+                            color: widget.statusColors[widget.status],
+                            size: 20),
                         const SizedBox(width: 10),
                         Row(
                           children: [
@@ -162,13 +211,17 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
                               height: 12,
                               margin: const EdgeInsets.only(right: 8),
                               decoration: BoxDecoration(
-                                  color: statusColors[_status],
+                                  color: widget.statusColors[widget.status],
                                   shape: BoxShape.circle),
                             ),
                             Text(
-                              _status.toString().split('.').last.toUpperCase(),
+                              widget.status
+                                  .toString()
+                                  .split('.')
+                                  .last
+                                  .toUpperCase(),
                               style: TextStyle(
-                                color: statusColors[_status],
+                                color: widget.statusColors[widget.status],
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -196,7 +249,9 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
                   ),
                 ),
                 child: Text(
-                  widget.existingTask == null ? 'Create' : 'Save',
+                  widget.existingTask == null
+                      ? AppLocalizations.of(context)!.create
+                      : AppLocalizations.of(context)!.save,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
@@ -236,7 +291,7 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
     final TaskStatus? status = await showDialog<TaskStatus>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text('Select status'),
+        title: Text(AppLocalizations.of(context)!.selectStatus),
         children: TaskStatus.values.map((TaskStatus status) {
           return SimpleDialogOption(
             onPressed: () => Navigator.pop(context, status),
@@ -247,14 +302,14 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
                   height: 16,
                   margin: const EdgeInsets.only(right: 8),
                   decoration: BoxDecoration(
-                    color: statusColors[status],
+                    color: widget.statusColors[status],
                     shape: BoxShape.circle,
                   ),
                 ),
                 Text(
                   status.toString().split('.').last.toUpperCase(),
                   style: TextStyle(
-                    color: statusColors[status],
+                    color: widget.statusColors[status],
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -266,14 +321,22 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
     );
 
     if (status != null && mounted) {
-      setState(() => _status = status);
+      setState(() => widget.status = status);
     }
   }
 
   void _handleTaskAction() {
+    if (widget.selectedFolder == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Please select a folder before creating a task'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
     if (_taskController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a task')),
+        SnackBar(
+            content: Text(AppLocalizations.of(context)!.warningContentTask)),
       );
       return;
     }
@@ -283,8 +346,9 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
       'date': _selectedDate,
       'time': _selectedTime,
       'note': _note,
-      'status': _status,
-      'statusColor': statusColors[_status],
+      'status': widget.status,
+      'statusColor': widget.statusColors[widget.status],
+      'existingFolders': widget.selectedFolder?.id,
     };
 
     Navigator.of(context).pop(result);

@@ -11,22 +11,34 @@ import 'package:todolist_app/task_status.dart';
 
 import './task.dart';
 import 'excel_service.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 class FolderDetailView extends StatefulWidget {
+  final String id;
   final String title;
   final IconData icon;
   final Color color;
   final int tasks;
-  final List<FolderData> folderLists;
-  final int totalTasks;
+  List<FolderData> folderLists;
+  int totalTasks;
   final Function saveFolders;
   final Function loadFolders;
   final Function editFolder;
+  final Function saveTasks;
   final ExcelService? excelService;
-  final FolderData folder;
+  FolderData folder;
+  List<Task> lateTasks;
+  List<Task> todayTasks;
+  List<Task> doneTasks;
+  List<Task> taskLists;
+  FolderData? selectedFolder;
+  final Function? selectFolder;
 
-  const FolderDetailView({
+  FolderDetailView({
     super.key,
+    this.selectedFolder,
+    required this.selectFolder,
+    required this.id,
     required this.title,
     required this.icon,
     required this.color,
@@ -34,9 +46,14 @@ class FolderDetailView extends StatefulWidget {
     required this.folderLists,
     required this.totalTasks,
     required this.saveFolders,
+    required this.saveTasks,
     required this.loadFolders,
+    required this.taskLists,
     required this.editFolder,
     required this.folder,
+    this.lateTasks = const [],
+    this.todayTasks = const [],
+    this.doneTasks = const [],
     this.excelService,
   });
 
@@ -47,9 +64,7 @@ class FolderDetailView extends StatefulWidget {
 }
 
 class _FolderDetailViewState extends State<FolderDetailView> {
-  late List<Task> lateTasks;
-  late List<Task> todayTasks;
-  late List<Task> doneTasks;
+  late String id;
   late String title;
   late IconData icon;
   late Color color;
@@ -58,6 +73,8 @@ class _FolderDetailViewState extends State<FolderDetailView> {
   late List<String> _availableFolderTitles = [];
   late int totalTasks = 0;
   late int tasks = 0;
+  late List<Task> taskLists = [];
+
   late final Function editFolder;
   late final TaskStatus _status = TaskStatus.TODO;
   final Map<TaskStatus, Color> statusColors = {
@@ -67,134 +84,219 @@ class _FolderDetailViewState extends State<FolderDetailView> {
     TaskStatus.DONE: Colors.green,
   };
 
-  void _updateTaskLists() {
-    final now = DateTime.now();
-
-    setState(() {
-      todayTasks.removeWhere((task) {
-        if (task.date.isBefore(DateTime(now.year, now.month, now.day))) {
-          lateTasks.add(task);
-          return true;
-        }
-        return false;
-      });
-    });
-  }
-
   @override
   void initState() {
     super.initState();
-    lateTasks = [];
-    todayTasks = [];
-    doneTasks = [];
-    _loadTasks().then((_) => _updateTaskLists());
+    _loadTasks().then((_) {
+      _organizeTasks();
+      _updateTaskLists(widget.folder);
+    });
+    id = widget.id;
     title = widget.title;
     icon = widget.icon;
     color = widget.color;
     folder = widget.folder;
     totalTasks = widget.tasks;
-    _loadTasks();
+    taskLists = widget.taskLists;
+    widget.loadFolders();
+
     _availableFolderTitles = widget.folderLists
-        .where((folder) => folder.title != widget.title)
+        .where((folder) => folder.id != widget.id)
         .map((folder) => folder.title)
         .toList();
   }
 
-  Future<void> _loadTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    List<Task> allTasks = [];
+  void _organizeTasks() {
+    setState(() {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
 
-    if (title == "All") {
-      for (var folder in widget.folderLists) {
-        final String? tasksJson = prefs.getString('tasks_${folder.title}');
-        if (tasksJson != null) {
-          final List<dynamic> decodedTasks = json.decode(tasksJson);
-          allTasks.addAll(
-              decodedTasks.map((taskJson) => Task.fromJson(taskJson)).toList());
+      widget.lateTasks.clear();
+      widget.todayTasks.clear();
+      widget.doneTasks.clear();
+
+      for (var task in widget.taskLists) {
+        task.isDone = task.status == TaskStatus.DONE;
+
+        if (task.isDone) {
+          widget.doneTasks.add(task);
+        } else {
+          if (task.date.isBefore(today)) {
+            widget.lateTasks.add(task);
+          } else if (task.date.year == today.year &&
+              task.date.month == today.month &&
+              task.date.day == today.day) {
+            widget.todayTasks.add(task);
+          }
         }
       }
-    } else {
-      final String? tasksJson = prefs.getString('tasks_${widget.title}');
-      if (tasksJson != null) {
-        final List<dynamic> decodedTasks = json.decode(tasksJson);
-        allTasks =
-            decodedTasks.map((taskJson) => Task.fromJson(taskJson)).toList();
-      }
-    }
-
-    setState(() {
-      lateTasks = allTasks
-          .where((task) => task.date.isBefore(DateTime.now()) && !task.isDone)
-          .toList();
-      todayTasks = allTasks
-          .where((task) => !task.date.isBefore(DateTime.now()) && !task.isDone)
-          .toList();
-      doneTasks = allTasks.where((task) => task.isDone).toList();
-      totalTasks = allTasks.length;
     });
   }
 
-  void _moveTaskToFolder(Task task, FolderData targetFolder) async {
-    setState(() {
-      lateTasks.remove(task);
-      todayTasks.remove(task);
-      doneTasks.remove(task);
-      saveTasks();
-    });
+  void _updateTaskLists(FolderData? folder) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
-    final prefs = await SharedPreferences.getInstance();
-    final String? targetTasksJson =
-        prefs.getString('tasks_${targetFolder.title}');
-    List<Task> targetTasks = [];
-
-    if (targetTasksJson != null) {
-      final List<dynamic> decodedTasks = json.decode(targetTasksJson);
-      targetTasks =
-          decodedTasks.map((taskJson) => Task.fromJson(taskJson)).toList();
+    if (folder != null) {
+      setState(() {
+        widget.taskLists = folder.taskLists ?? [];
+        _organizeTasks();
+      });
     }
+  }
 
-    targetTasks.add(task);
-    await prefs.setString(
-      'tasks_${targetFolder.title}',
-      json.encode(targetTasks.map((t) => t.toJson()).toList()),
-    );
+  Future<void> _loadTasks() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      List<Task> allTasks = [];
 
-    int newTaskCount = targetTasks.length;
-    final updatedTargetFolder = targetFolder.copyWith(tasks: newTaskCount);
+      if (widget.title == "All") {
+        allTasks = widget.folderLists
+            .expand((folder) {
+              final folderId = folder.id;
+              final String? tasksJson = prefs.getString('tasks_$folderId');
+              if (tasksJson != null) {
+                final List<dynamic> decodedTasks = json.decode(tasksJson);
+                return decodedTasks.map((taskJson) => Task.fromJson(taskJson));
+              }
+              return <Task>[];
+            })
+            .toList()
+            .cast<Task>();
+      } else {
+        final String? tasksJson = prefs.getString('tasks_${widget.folder.id}');
+        if (tasksJson != null) {
+          final List<dynamic> decodedTasks = json.decode(tasksJson);
+          allTasks =
+              decodedTasks.map((taskJson) => Task.fromJson(taskJson)).toList();
+        }
+      }
 
-    List<FolderData> folderDataList = widget.folderLists;
-    int folderIndex =
-        folderDataList.indexWhere((f) => f.title == targetFolder.title);
+      setState(() {
+        widget.taskLists = allTasks;
+        widget.totalTasks = allTasks.length;
+      });
 
-    if (folderIndex != -1) {
-      folderDataList[folderIndex] = updatedTargetFolder;
-      await prefs.setString('folders',
-          json.encode(folderDataList.map((f) => f.toJson()).toList()));
+      _organizeTasks();
+    } catch (e) {
+      debugPrint("Error loading tasks: $e");
     }
+  }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+  Future<void> _moveTaskToFolder(FolderData targetFolder, Task task) async {
+    try {
+      FolderData allFolder = widget.folderLists.firstWhere(
+        (folder) => folder.title == "All",
+        orElse: () => widget.folder,
+      );
+
+      FolderData sourceFolder = widget.folder;
+
+      if (sourceFolder.id != allFolder.id) {
+        setState(() {
+          sourceFolder.taskLists?.removeWhere((t) => t.id == task.id);
+          sourceFolder = sourceFolder.copyWith(
+            taskLists: sourceFolder.taskLists,
+            tasks: sourceFolder.taskLists?.length ?? 0,
+          );
+        });
+        await widget.saveTasks(sourceFolder);
+      }
+
+      if (targetFolder.id != sourceFolder.id) {
+        setState(() {
+          targetFolder.taskLists ??= [];
+          targetFolder.taskLists?.removeWhere((t) => t.id == task.id);
+          targetFolder.taskLists?.add(task);
+          targetFolder = targetFolder.copyWith(
+            taskLists: targetFolder.taskLists,
+            tasks: targetFolder.taskLists?.length ?? 0,
+          );
+        });
+        await widget.saveTasks(targetFolder);
+      }
+
+      if (allFolder.id != targetFolder.id && allFolder.id != sourceFolder.id) {
+        setState(() {
+          allFolder.taskLists ??= [];
+          allFolder.taskLists?.removeWhere((t) => t.id == task.id);
+          if (shouldAddTaskToAllFolder(task, targetFolder)) {
+            allFolder.taskLists?.add(task);
+          }
+          allFolder = allFolder.copyWith(
+            taskLists: allFolder.taskLists,
+            tasks: allFolder.taskLists?.length ?? 0,
+          );
+        });
+        await widget.saveTasks(allFolder);
+      }
+
+      final updatedFolders = widget.folderLists.map((folder) {
+        if (folder.id == sourceFolder.id) return sourceFolder;
+        if (folder.id == targetFolder.id) return targetFolder;
+        if (folder.id == allFolder.id) return allFolder;
+        return folder;
+      }).toList();
+
+      await widget.saveFolders(updatedFolders);
+
+      await _loadTasks();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
           content: Text(
-              'Task đã được di chuyển tới thư mục "${targetFolder.title}".')),
-    );
+            AppLocalizations.of(context)!.taskHasbeenMove(targetFolder.title),
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint("Error moving task: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Không thể di chuyển task")),
+      );
+    }
+  }
+
+  bool shouldAddTaskToAllFolder(Task task, FolderData targetFolder) {
+    return targetFolder.title == "All";
   }
 
   void _showMoveTaskDialog(Task task) {
+    final availableFolders = widget.folderLists
+        .where((folder) =>
+            folder.id != task.existingFolders?.id &&
+            folder.id != widget.folder.id &&
+            folder.title != 'All')
+        .toList();
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Move Task To'),
+          title: Text(AppLocalizations.of(context)!.moveTaskToFolder),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              children: widget.folderLists
-                  .where((folder) => folder.title != widget.title)
+              children: availableFolders
                   .map((folder) => ListTile(
+                        leading: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color:
+                                Theme.of(context).primaryColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            folder.icon,
+                            color: Theme.of(context).primaryColor,
+                            size: 24,
+                          ),
+                        ),
                         title: Text(folder.title),
                         onTap: () {
                           Navigator.pop(context);
-                          _moveTaskToFolder(task, folder);
+                          _moveTaskToFolder(folder, task);
                         },
                       ))
                   .toList(),
@@ -203,7 +305,7 @@ class _FolderDetailViewState extends State<FolderDetailView> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(AppLocalizations.of(context)!.cancel),
             ),
           ],
         );
@@ -211,28 +313,28 @@ class _FolderDetailViewState extends State<FolderDetailView> {
     );
   }
 
-  Future<void> saveTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final allTasks = [...lateTasks, ...todayTasks, ...doneTasks];
+  // Future<void> saveTasks() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   final allTasks = [...lateTasks, ...todayTasks, ...doneTasks];
 
-    final tasksJson =
-        json.encode(allTasks.map((task) => task.toJson()).toList());
-    await prefs.setString('tasks_${widget.title}', tasksJson);
+  //   final tasksJson =
+  //       json.encode(allTasks.map((task) => task.toJson()).toList());
+  //   await prefs.setString('tasks_${widget.title}', tasksJson);
 
-    int newTaskCount = allTasks.length;
+  //   int newTaskCount = allTasks.length;
 
-    int folderIndex =
-        widget.folderLists.indexWhere((folder) => folder.title == widget.title);
-    if (folderIndex != -1) {
-      final updatedFolder =
-          widget.folderLists[folderIndex].copyWith(tasks: newTaskCount);
-      widget.folderLists[folderIndex] = updatedFolder;
+  //   int folderIndex =
+  //       widget.folderLists.indexWhere((folder) => folder.title == widget.title);
+  //   if (folderIndex != -1) {
+  //     final updatedFolder =
+  //         widget.folderLists[folderIndex].copyWith(tasks: newTaskCount);
+  //     widget.folderLists[folderIndex] = updatedFolder;
 
-      await prefs.setString('folders',
-          jsonEncode(widget.folderLists.map((f) => f.toJson()).toList()));
-      widget.saveFolders(widget.folderLists);
-    }
-  }
+  //     await prefs.setString('folders',
+  //         jsonEncode(widget.folderLists.map((f) => f.toJson()).toList()));
+  //     widget.saveFolders(widget.folderLists);
+  //   }
+  // }
 
   @override
   void dispose() {
@@ -240,123 +342,204 @@ class _FolderDetailViewState extends State<FolderDetailView> {
     super.dispose();
   }
 
-  void _handleTaskToggle(
-      Task task, List<Task> sourceList, List<Task> targetList) {
+  void _handleTaskToggle(Task task, bool? value) async {
+    if (value == null) return;
+
+    if (value) {
+      task.isDone = true;
+      if (task.status != TaskStatus.DONE) {
+        task.originalStatus = task.status;
+      }
+      task.status = TaskStatus.DONE;
+
+      widget.todayTasks.remove(task);
+      if (!widget.doneTasks.contains(task)) widget.doneTasks.add(task);
+    } else {
+      task.isDone = false;
+      task.status = task.originalStatus ?? TaskStatus.TODO;
+
+      widget.doneTasks.remove(task);
+      if (!widget.todayTasks.contains(task)) widget.todayTasks.add(task);
+    }
+
     setState(() {
-      sourceList.remove(task);
-      task.isDone = !task.isDone;
-      targetList.add(task);
-      saveTasks();
+      _organizeTasks();
     });
+
+    await widget.saveTasks(widget.folder);
+    await widget.saveFolders(widget.folderLists);
   }
 
-  void _addNewTask(Map<String, dynamic> taskData) {
-    final taskDate = taskData['date'] as DateTime;
-    final taskTime = taskData['time'] as TimeOfDay;
+  // void _addNewTask(Map<String, dynamic> taskData) {
+  //   final taskDate = taskData['date'] as DateTime;
+  //   final taskTime = taskData['time'] as TimeOfDay;
 
-    final task = Task(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      title: taskData['task'],
-      time: taskTime.format(context),
-      isDone: false,
-      note: taskData['note'] ?? '',
-      status: taskData['status'] ?? TaskStatus.PENDING,
-      date: taskDate,
-      createdAt: DateTime.now(),
-    );
+  //   final task = Task(
+  //     id: DateTime.now().millisecondsSinceEpoch.toString(),
+  //     title: taskData['task'],
+  //     time: taskTime.format(context),
+  //     isDone: false,
+  //     note: taskData['note'] ?? '',
+  //     status: taskData['status'] ?? TaskStatus.PENDING,
+  //     date: taskDate,
+  //     createdAt: DateTime.now(),
+  //   );
+
+  //   setState(() {
+  //     todayTasks.add(task);
+  //     totalTasks = lateTasks.length + todayTasks.length + doneTasks.length;
+
+  //     int folderIndex = widget.folderLists
+  //         .indexWhere((folder) => folder.title == widget.title);
+
+  //     if (folderIndex != -1) {
+  //       final updatedFolder =
+  //           widget.folderLists[folderIndex].copyWith(tasks: totalTasks);
+  //       widget.folderLists[folderIndex] = updatedFolder;
+
+  //       widget.saveFolders(widget.folderLists);
+  //     }
+
+  //     widget.saveTasks();
+  //   });
+  // }
+
+  void _deleteTask(Task task) async {
+    final allFolder =
+        widget.folderLists.firstWhere((folder) => folder.title == "All");
 
     setState(() {
-      todayTasks.add(task);
-      totalTasks = lateTasks.length + todayTasks.length + doneTasks.length;
+      widget.taskLists.removeWhere((t) => t.id == task.id);
 
-      int folderIndex = widget.folderLists
-          .indexWhere((folder) => folder.title == widget.title);
+      for (var i = 0; i < widget.folderLists.length; i++) {
+        var folder = widget.folderLists[i];
 
-      if (folderIndex != -1) {
-        final updatedFolder =
-            widget.folderLists[folderIndex].copyWith(tasks: totalTasks);
-        widget.folderLists[folderIndex] = updatedFolder;
+        folder.taskLists?.removeWhere((t) => t.id == task.id);
 
-        widget.saveFolders(widget.folderLists);
+        widget.folderLists[i] = folder.copyWith(
+            taskLists: folder.taskLists, tasks: folder.taskLists?.length ?? 0);
       }
 
-      saveTasks();
+      _organizeTasks();
     });
-  }
 
-  void _deleteTask(Task task) {
-    setState(() {
-      lateTasks.removeWhere((t) => t.id == task.id);
-      todayTasks.removeWhere((t) => t.id == task.id);
-      doneTasks.removeWhere((t) => t.id == task.id);
+    await widget.saveTasks(widget.folder);
+    await widget.saveTasks(allFolder);
+    await widget.saveFolders(widget.folderLists);
 
-      totalTasks = lateTasks.length + todayTasks.length + doneTasks.length;
-
-      int folderIndex = widget.folderLists
-          .indexWhere((folder) => folder.title == widget.title);
-      if (folderIndex != -1) {
-        final updatedFolder =
-            widget.folderLists[folderIndex].copyWith(tasks: totalTasks);
-        widget.folderLists[folderIndex] = updatedFolder;
-
-        widget.saveFolders(widget.folderLists);
-      }
-
-      saveTasks();
-    });
+    if (mounted) {
+      setState(() {
+        widget.totalTasks = widget.taskLists.length;
+      });
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Đã xóa task "${task.title}"')),
+      SnackBar(
+        content: Text(
+          AppLocalizations.of(context)!.deleteTasksSuccess(task.title),
+        ),
+      ),
     );
   }
 
   void _editTask(Task task) async {
+    final currentFolder = widget.folderLists.firstWhere(
+      (folder) =>
+          folder.title != "All" &&
+          folder.taskLists!.any((t) => t.id == task.id),
+      orElse: () => widget.folder,
+    );
+
     final result = await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => CreateTaskDialog(task, _status, statusColors),
+        builder: (context) => CreateTaskDialog(
+          existingTask: task,
+          status: task.status,
+          statusColors: statusColors,
+          existingFolders: widget.folderLists,
+          selectedFolder: currentFolder,
+          selectFolder: (context) async {
+            await widget.selectFolder!(context);
+          },
+        ),
         fullscreenDialog: true,
       ),
     );
 
     if (result != null) {
+      final editedTask = Task(
+        id: task.id,
+        title: result['task'],
+        time: result['time'].format(context),
+        isDone: task.isDone,
+        note: result['note'] ?? '',
+        status: result['status'] ?? TaskStatus.PENDING,
+        date: result['date'],
+        createdAt: task.createdAt,
+        updatedAt: DateTime.now(),
+      );
+
+      final allFolderIndex =
+          widget.folderLists.indexWhere((folder) => folder.title == "All");
+      final currentFolderIndex = widget.folderLists.indexOf(currentFolder);
+
       setState(() {
-        lateTasks.removeWhere((t) => t.id == task.id);
-        todayTasks.removeWhere((t) => t.id == task.id);
-        doneTasks.removeWhere((t) => t.id == task.id);
-
-        final editedTask = Task(
-          id: task.id,
-          title: result['task'],
-          time: result['time'].format(context),
-          isDone: task.isDone,
-          note: result['note'] ?? '',
-          status: result['status'] ?? TaskStatus.PENDING,
-          date: result['date'],
-          createdAt: task.createdAt,
-          updatedAt: DateTime.now(),
-        );
-
-        if (!editedTask.isDone) {
-          todayTasks.add(editedTask);
-        } else {
-          doneTasks.add(editedTask);
+        if (currentFolderIndex != -1) {
+          final taskIndex = widget.folderLists[currentFolderIndex].taskLists!
+              .indexWhere((t) => t.id == task.id);
+          if (taskIndex != -1) {
+            widget.folderLists[currentFolderIndex].taskLists![taskIndex] =
+                editedTask;
+          }
         }
 
-        saveTasks();
+        if (allFolderIndex != -1) {
+          final allFolder = widget.folderLists[allFolderIndex];
+          final taskIndex =
+              allFolder.taskLists!.indexWhere((t) => t.id == task.id);
+
+          if (taskIndex != -1) {
+            allFolder.taskLists![taskIndex] = editedTask;
+          } else {
+            allFolder.taskLists!.add(editedTask);
+          }
+        }
+
+        widget.taskLists = widget.taskLists.map((t) {
+          return t.id == task.id ? editedTask : t;
+        }).toList();
+
+        _organizeTasks();
+
+        widget.totalTasks = widget.taskLists.length;
       });
+
+      if (currentFolderIndex != -1) {
+        await widget.saveTasks(widget.folderLists[currentFolderIndex]);
+      }
+      if (allFolderIndex != -1) {
+        await widget.saveTasks(widget.folderLists[allFolderIndex]);
+      }
+      await widget.saveFolders(widget.folderLists);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.editFolderSuccess),
+        ),
+      );
     }
   }
 
   Future<void> _deleteFolder() async {
-    final int totalTasksInFolder =
-        lateTasks.length + todayTasks.length + doneTasks.length;
+    final int totalTasksInFolder = widget.lateTasks.length +
+        widget.todayTasks.length +
+        widget.doneTasks.length;
 
     if (totalTasksInFolder > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Thư mục "${folder.title}" còn chứa task. Vui lòng xoá hết task trước khi xoá thư mục.',
-          ),
+          content:
+              Text(AppLocalizations.of(context)!.warningDelete(folder.title)),
         ),
       );
       return;
@@ -364,21 +547,21 @@ class _FolderDetailViewState extends State<FolderDetailView> {
 
     final prefs = await SharedPreferences.getInstance();
 
-    await prefs.remove('tasks_${folder.title}');
+    await prefs.remove('tasks_${folder.id}');
 
     String? foldersJson = prefs.getString('folders');
-    if (foldersJson != null) {
-      List<dynamic> folderList = json.decode(foldersJson);
+    List<dynamic> folderList = json.decode(foldersJson!);
 
-      folderList.removeWhere((f) => f['title'] == folder.title);
+    folderList.removeWhere((f) => f['id'] == folder.id);
 
-      await prefs.setString('folders', json.encode(folderList));
-    }
+    await prefs.setString('folders', json.encode(folderList));
 
     Navigator.of(context).pop();
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Đã xóa thư mục "${folder.title}"')),
+      SnackBar(
+          content: Text(
+              AppLocalizations.of(context)!.deleteFolderSuccess(folder.title))),
     );
 
     await _loadTasks();
@@ -399,10 +582,8 @@ class _FolderDetailViewState extends State<FolderDetailView> {
 
   @override
   Widget build(BuildContext context) {
-    bool isMobile =
-        MediaQuery.of(context).size.width < 600; // Kiểm tra nếu là mobile
-    bool isDesktop = PlatformUtil.isDesktopPlatform; // Kiểm tra nếu là desktop
-
+    bool isMobile = MediaQuery.of(context).size.width < 600;
+    bool isDesktop = PlatformUtil.isDesktopPlatform;
     return Scaffold(
       backgroundColor: widget.color,
       appBar: (widget.title == 'All' && isMobile)
@@ -430,69 +611,78 @@ class _FolderDetailViewState extends State<FolderDetailView> {
                         title = widget.folder.title;
                         icon = widget.folder.icon;
                         color = widget.folder.color;
+                        taskLists = widget.folder.taskLists!;
                       });
-                      Navigator.pop(context, true);
+                      Navigator.pop(context, widget.folder);
                     } else if (result == 'delete') {
                       showDialog(
                         context: context,
                         builder: (context) => AlertDialog(
-                          title: const Text('Delete Folder'),
-                          content: const Text(
-                              'Are you sure you want to delete this folder?'),
+                          title:
+                              Text(AppLocalizations.of(context)!.deleteFolder),
+                          content: Text(AppLocalizations.of(context)!
+                              .confirmDeleteFolder),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context),
-                              child: const Text('Cancel'),
+                              child: Text(AppLocalizations.of(context)!.cancel),
                             ),
                             TextButton(
                               onPressed: () async {
                                 Navigator.of(context).pop();
                                 await _deleteFolder();
                               },
-                              child: const Text('Delete'),
+                              child: Text(AppLocalizations.of(context)!.delete),
                             ),
                           ],
                         ),
                       );
                     } else if (result == 'exportExcel') {
-                      if (widget.title == 'All') {
-                        await exportTasksToExcel(
-                          context: context,
-                          folderTitle: widget.title,
-                          totalTasks: totalTasks,
-                          lateTasks: lateTasks,
-                          todayTasks: todayTasks,
-                          doneTasks: doneTasks,
-                        );
-                      }
+                      await exportTasksToExcel(
+                        context: context,
+                        folderTitle: widget.title,
+                        totalTasks: totalTasks,
+                        lateTasks: widget.lateTasks,
+                        todayTasks: widget.todayTasks,
+                        doneTasks: widget.doneTasks,
+                      );
                     }
                   },
                   itemBuilder: (BuildContext context) {
                     List<PopupMenuEntry<String>> menuItems = [];
-
-                    // Chỉ hiển thị "Export to Excel" nếu là desktop và folder là "All"
                     if (widget.title == 'All' && isDesktop) {
                       menuItems.add(
-                        const PopupMenuItem<String>(
+                        PopupMenuItem<String>(
                           value: 'exportExcel',
                           child: Row(
                             children: [
-                              Icon(Icons.file_download),
-                              SizedBox(width: 8),
-                              Text('Export to Excel'),
+                              const Icon(Icons.file_download),
+                              const SizedBox(width: 8),
+                              Text(AppLocalizations.of(context)!.exportExcel),
                             ],
                           ),
                         ),
                       );
                     } else if (widget.title != 'All') {
                       menuItems.addAll([
-                        const PopupMenuItem<String>(
+                        PopupMenuItem<String>(
                           value: 'edit',
-                          child: Text('Edit Folder'),
+                          child: Text(AppLocalizations.of(context)!.editFolder),
                         ),
-                        const PopupMenuItem<String>(
+                        PopupMenuItem<String>(
                           value: 'delete',
-                          child: Text('Delete Folder'),
+                          child:
+                              Text(AppLocalizations.of(context)!.deleteFolder),
+                        ),
+                        PopupMenuItem<String>(
+                          value: 'exportExcel',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.file_download),
+                              const SizedBox(width: 8),
+                              Text(AppLocalizations.of(context)!.exportExcel),
+                            ],
+                          ),
                         ),
                       ]);
                     }
@@ -525,7 +715,7 @@ class _FolderDetailViewState extends State<FolderDetailView> {
                   ),
                 ),
                 Text(
-                  '${totalTasks} Tasks',
+                  '$totalTasks ${AppLocalizations.of(context)!.tasks}',
                   style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 16,
@@ -547,47 +737,55 @@ class _FolderDetailViewState extends State<FolderDetailView> {
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
-                  _buildSection('Late', lateTasks),
-                  _buildSection('Today', todayTasks),
-                  _buildSection('Done', doneTasks),
+                  _buildSection(
+                      AppLocalizations.of(context)!.late, widget.lateTasks),
+                  _buildSection(
+                      AppLocalizations.of(context)!.today, widget.todayTasks),
+                  _buildSection(
+                      AppLocalizations.of(context)!.done, widget.doneTasks),
                 ],
               ),
             ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          final result = await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => const CreateTaskDialog(
-                null,
-                TaskStatus.TODO,
-                {
-                  TaskStatus.TODO: Colors.blue,
-                  TaskStatus.INPROGRESS: Colors.orange,
-                  TaskStatus.PENDING: Colors.purple,
-                  TaskStatus.DONE: Colors.green,
-                },
-              ),
-              fullscreenDialog: true,
-            ),
-          );
+      // floatingActionButton: FloatingActionButton(
+      //   onPressed: () async {
+      //     final result = await Navigator.of(context).push(
+      //       MaterialPageRoute(
+      //         builder: (context) => const CreateTaskDialog(
+      //           null,
+      //           TaskStatus.TODO,
+      //          const {
+      //             TaskStatus.TODO: Colors.blue,
+      //             TaskStatus.INPROGRESS: Colors.orange,
+      //             TaskStatus.PENDING: Colors.purple,
+      //             TaskStatus.DONE: Colors.green,
+      //           },
+      //         ),
+      //         fullscreenDialog: true,
+      //       ),
+      //     );
 
-          if (result != null) {
-            _addNewTask(result as Map<String, dynamic>);
-          }
-        },
-        backgroundColor: Colors.blue,
-        child: const Icon(Icons.add),
-      ),
+      //     if (result != null) {
+      //       _addNewTask(result as Map<String, dynamic>);
+      //     }
+      //   },
+      //   backgroundColor: Colors.blue,
+      //   child: const Icon(Icons.add),
+      // ),
     );
   }
 
   Widget _buildSection(String title, List<Task> tasks) {
-    if (title == 'Today') {
-      _updateTaskLists();
+    if (title == AppLocalizations.of(context)!.late) {
+      tasks = widget.lateTasks;
+    } else if (title == AppLocalizations.of(context)!.today) {
+      tasks = widget.todayTasks;
+    } else if (title == AppLocalizations.of(context)!.done) {
+      tasks = widget.doneTasks;
     }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -597,7 +795,9 @@ class _FolderDetailViewState extends State<FolderDetailView> {
             Text(
               title,
               style: TextStyle(
-                color: title == 'Done' ? widget.color : Colors.black54,
+                color: title == AppLocalizations.of(context)!.done
+                    ? widget.color
+                    : Colors.black,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),
@@ -605,25 +805,23 @@ class _FolderDetailViewState extends State<FolderDetailView> {
             PopupMenuButton<String>(
               icon: const Icon(Icons.sort, color: Colors.black54),
               onSelected: (String result) {
-                if (result == 'sortByStatus') {
-                  setState(() {
+                setState(() {
+                  if (result == 'sortByStatus') {
                     _sortTasksByStatus(tasks);
-                  });
-                } else if (result == 'sortByUpdateTime') {
-                  setState(() {
+                  } else if (result == 'sortByUpdateTime') {
                     _sortTasksByUpdateTime(tasks);
-                  });
-                }
+                  }
+                });
               },
               itemBuilder: (BuildContext context) {
                 return [
-                  const PopupMenuItem<String>(
+                  PopupMenuItem<String>(
                     value: 'sortByStatus',
-                    child: Text('Sort by Status'),
+                    child: Text(AppLocalizations.of(context)!.sortByStatus),
                   ),
-                  const PopupMenuItem<String>(
+                  PopupMenuItem<String>(
                     value: 'sortByUpdateTime',
-                    child: Text('Sort by Update Time'),
+                    child: Text(AppLocalizations.of(context)!.sortByUpdateTime),
                   ),
                 ];
               },
@@ -631,7 +829,13 @@ class _FolderDetailViewState extends State<FolderDetailView> {
           ],
         ),
         const SizedBox(height: 10),
-        ...tasks.map((task) => _buildTask(task, title)),
+        tasks.isNotEmpty
+            ? Column(
+                children: tasks.map((task) => _buildTask(task, title)).toList())
+            : Text(
+                AppLocalizations.of(context)!.emtyTask,
+                style: const TextStyle(fontSize: 14, color: Colors.grey),
+              ),
         const SizedBox(height: 20),
       ],
     );
@@ -658,18 +862,18 @@ class _FolderDetailViewState extends State<FolderDetailView> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text(
-                      'Status: ',
-                      style: TextStyle(
+                    Text(
+                      AppLocalizations.of(context)!.status,
+                      style: const TextStyle(
                         fontSize: 12,
                         color: Colors.blueGrey,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     Container(
-                      width: 12,
-                      height: 12,
-                      margin: const EdgeInsets.only(right: 4),
+                      width: 10,
+                      height: 10,
+                      margin: const EdgeInsets.only(right: 2),
                       decoration: BoxDecoration(
                         color: statusColors[task.status] ?? Colors.grey,
                         shape: BoxShape.circle,
@@ -678,7 +882,7 @@ class _FolderDetailViewState extends State<FolderDetailView> {
                     Text(
                       task.status.toString().split('.').last,
                       style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: 10,
                         color: Colors.blueGrey,
                       ),
                     ),
@@ -686,8 +890,8 @@ class _FolderDetailViewState extends State<FolderDetailView> {
                 ),
                 Text(
                   task.updatedAt != null
-                      ? 'Last Edit: ${DateFormat('hh:mm a').format(task.updatedAt!)}'
-                      : 'No edits yet',
+                      ? '${AppLocalizations.of(context)!.lastEdit} ${DateFormat('hh:mm a').format(task.updatedAt!)}'
+                      : AppLocalizations.of(context)!.notEditYet,
                   style: const TextStyle(
                     fontSize: 12,
                     color: Colors.grey,
@@ -696,11 +900,12 @@ class _FolderDetailViewState extends State<FolderDetailView> {
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.move_to_inbox),
-            color: widget.color,
-            onPressed: () => _showMoveTaskDialog(task),
-          ),
+          if (widget.title != "All")
+            IconButton(
+              icon: const Icon(Icons.move_to_inbox),
+              color: widget.color,
+              onPressed: () => _showMoveTaskDialog(task),
+            ),
           IconButton(
               icon: const Icon(Icons.edit),
               color: widget.color,
@@ -715,20 +920,20 @@ class _FolderDetailViewState extends State<FolderDetailView> {
               showDialog(
                 context: context,
                 builder: (context) => AlertDialog(
-                  title: const Text('Delete Task'),
+                  title: Text(AppLocalizations.of(context)!.deleteTask),
                   content:
-                      const Text('Are you sure you want to delete this task?'),
+                      Text(AppLocalizations.of(context)!.confirmDeleteTask),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
+                      child: Text(AppLocalizations.of(context)!.cancel),
                     ),
                     TextButton(
                       onPressed: () {
                         _deleteTask(task);
                         Navigator.of(context).pop();
                       },
-                      child: const Text('Delete'),
+                      child: Text(AppLocalizations.of(context)!.delete),
                     ),
                   ],
                 ),
@@ -738,23 +943,7 @@ class _FolderDetailViewState extends State<FolderDetailView> {
           Checkbox(
             value: task.isDone,
             onChanged: (value) {
-              if (task.isDone) {
-                if (section == 'Done') {
-                  _handleTaskToggle(
-                    task,
-                    doneTasks,
-                    task.time.contains('April') ? lateTasks : todayTasks,
-                  );
-                }
-              } else {
-                if (section == 'Late' || section == 'Today') {
-                  _handleTaskToggle(
-                    task,
-                    section == 'Late' ? lateTasks : todayTasks,
-                    doneTasks,
-                  );
-                }
-              }
+              _handleTaskToggle(task, value);
             },
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(4),

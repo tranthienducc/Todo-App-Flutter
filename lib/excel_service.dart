@@ -50,20 +50,17 @@ class ExcelService {
       );
 
       if (result == null) {
-        print('No file selected');
         return [];
       }
 
       var bytes = result.files.single.bytes;
       if (bytes == null) {
-        print('File bytes are null');
         return [];
       }
 
       var excel = Excel.decodeBytes(bytes);
 
       if (excel.tables.isEmpty) {
-        print('No sheets found in the Excel file');
         return [];
       }
 
@@ -71,16 +68,12 @@ class ExcelService {
       var rows = excel.tables[sheetName]!.rows;
 
       if (rows.isEmpty) {
-        print('No rows found in the Excel sheet');
         return [];
       }
 
       List<Map<String, dynamic>> folders = [];
 
       for (var row in rows.skip(1)) {
-        // Bỏ qua hàng tiêu đề
-        print('Row data: $row');
-
         String title = row[0]?.value?.toString() ?? '';
         String iconName = row[1]?.value?.toString() ?? '';
         String colorName = row[2]?.value?.toString() ?? '';
@@ -88,7 +81,6 @@ class ExcelService {
         Color color = _parseColorFromName(colorName);
 
         if (title.isEmpty) {
-          print('Skipping invalid folder: Title is empty');
           continue;
         }
 
@@ -124,13 +116,9 @@ class ExcelService {
 
       List<int>? fileBytes = excel.save();
 
-      if (fileBytes != null) {
-        File(filePath)
-          ..createSync(recursive: true)
-          ..writeAsBytesSync(fileBytes);
-      } else {
-        throw Exception('Không thể tạo file Excel');
-      }
+      File(filePath)
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(fileBytes!);
     } catch (e) {
       print('Lỗi khi lưu file Excel: $e');
       rethrow;

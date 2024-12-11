@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
-
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'main.dart';
 
 class FolderCard extends StatelessWidget {
@@ -17,7 +17,7 @@ class FolderCard extends StatelessWidget {
     super.key,
     this.title = '',
     this.tasks = 0,
-    this.icon = Icons.folder,
+    required this.icon,
     this.color = Colors.grey,
     required this.onTap,
     this.folder,
@@ -35,7 +35,7 @@ class FolderCard extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return _buildFolderCard();
+    return _buildFolderCard(context);
   }
 
   Widget _buildShimmerLoading() {
@@ -76,7 +76,7 @@ class FolderCard extends StatelessWidget {
     );
   }
 
-  Widget _buildFolderCard() {
+  Widget _buildFolderCard(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: IntrinsicHeight(
@@ -115,7 +115,7 @@ class FolderCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '$tasks Tasks',
+                  '$tasks ${AppLocalizations.of(context)!.tasks}',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey[600],
