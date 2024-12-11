@@ -277,29 +277,45 @@ class _FolderDetailViewState extends State<FolderDetailView> {
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              children: availableFolders
-                  .map((folder) => ListTile(
-                        leading: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color:
-                                Theme.of(context).primaryColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            folder.icon,
-                            color: Theme.of(context).primaryColor,
-                            size: 24,
+              children: availableFolders.isNotEmpty
+                  ? availableFolders
+                      .map((folder) => ListTile(
+                            leading: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .primaryColor
+                                    .withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                folder.icon,
+                                color: Theme.of(context).primaryColor,
+                                size: 24,
+                              ),
+                            ),
+                            title: Text(folder.title),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _moveTaskToFolder(folder, task);
+                            },
+                          ))
+                      .toList()
+                  : [
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Text(
+                            'No folder found',
+                            style: TextStyle(
+                              color: Theme.of(context).hintColor,
+                              fontSize: 16,
+                            ),
                           ),
                         ),
-                        title: Text(folder.title),
-                        onTap: () {
-                          Navigator.pop(context);
-                          _moveTaskToFolder(folder, task);
-                        },
-                      ))
-                  .toList(),
+                      ),
+                    ],
             ),
           ),
           actions: [
@@ -312,29 +328,6 @@ class _FolderDetailViewState extends State<FolderDetailView> {
       },
     );
   }
-
-  // Future<void> saveTasks() async {
-  //   final prefs = await SharedPreferences.getInstance();
-  //   final allTasks = [...lateTasks, ...todayTasks, ...doneTasks];
-
-  //   final tasksJson =
-  //       json.encode(allTasks.map((task) => task.toJson()).toList());
-  //   await prefs.setString('tasks_${widget.title}', tasksJson);
-
-  //   int newTaskCount = allTasks.length;
-
-  //   int folderIndex =
-  //       widget.folderLists.indexWhere((folder) => folder.title == widget.title);
-  //   if (folderIndex != -1) {
-  //     final updatedFolder =
-  //         widget.folderLists[folderIndex].copyWith(tasks: newTaskCount);
-  //     widget.folderLists[folderIndex] = updatedFolder;
-
-  //     await prefs.setString('folders',
-  //         jsonEncode(widget.folderLists.map((f) => f.toJson()).toList()));
-  //     widget.saveFolders(widget.folderLists);
-  //   }
-  // }
 
   @override
   void dispose() {
@@ -673,16 +666,6 @@ class _FolderDetailViewState extends State<FolderDetailView> {
                           value: 'delete',
                           child:
                               Text(AppLocalizations.of(context)!.deleteFolder),
-                        ),
-                        PopupMenuItem<String>(
-                          value: 'exportExcel',
-                          child: Row(
-                            children: [
-                              const Icon(Icons.file_download),
-                              const SizedBox(width: 8),
-                              Text(AppLocalizations.of(context)!.exportExcel),
-                            ],
-                          ),
                         ),
                       ]);
                     }
