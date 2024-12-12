@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:todolist_app/main.dart';
-import 'package:todolist_app/note_dialog.dart';
-import 'package:todolist_app/task.dart';
-import 'package:todolist_app/task_status.dart';
+import 'package:todolist_app/classed/folder_data.dart';
+import 'package:todolist_app/utils/index.dart';
+import 'package:todolist_app/widgets/note_dialog.dart';
+import 'package:todolist_app/classed/task.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:todolist_app/utils/enum/enum.dart';
 
 class CreateTaskDialog extends StatefulWidget {
   final Task? existingTask;
@@ -32,28 +33,6 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
   late DateTime _selectedDate;
   late TimeOfDay _selectedTime;
   late String _note;
-
-  TimeOfDay parseTimeOfDay(String timeString) {
-    final RegExp timeFormat = RegExp(r'(\d+):(\d+)([APMapm]{2})');
-    final match = timeFormat.firstMatch(timeString);
-
-    if (match != null) {
-      final hour = int.parse(match.group(1)!);
-      final minute = int.parse(match.group(2)!);
-      final period = match.group(3)?.toUpperCase();
-
-      int adjustedHour = hour;
-      if (period == 'PM' && hour != 12) {
-        adjustedHour += 12;
-      } else if (period == 'AM' && hour == 12) {
-        adjustedHour = 0;
-      }
-
-      return TimeOfDay(hour: adjustedHour, minute: minute);
-    }
-
-    return TimeOfDay.now();
-  }
 
   @override
   void initState() {
@@ -86,18 +65,102 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
     }
   }
 
+  Future<void> _selectDateTime(BuildContext context) async {
+    final DateTime? date = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+
+    if (date != null) {
+      final TimeOfDay? time = await showTimePicker(
+        context: context,
+        initialTime: _selectedTime,
+      );
+      if (time != null && mounted) {
+        setState(() {
+          _selectedDate = date;
+          _selectedTime = time;
+        });
+      }
+    }
+  }
+
+  Future<void> _selectStatus(BuildContext context) async {
+    final TaskStatus? status = await showDialog<TaskStatus>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(AppLocalizations.of(context)!.selectStatus),
+        children: TaskStatus.values.map((TaskStatus status) {
+          return SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, status),
+            child: Row(
+              children: [
+                Container(
+                  width: 16,
+                  height: 16,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: widget.statusColors[status],
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                Text(
+                  status.toString().split('.').last.toUpperCase(),
+                  style: TextStyle(
+                    color: widget.statusColors[status],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+
+    if (status != null && mounted) {
+      setState(() => widget.status = status);
+    }
+  }
+
+  void _handleTaskAction() {
+    if (widget.selectedFolder == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Please select a folder before creating a task'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+    if (_taskController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(AppLocalizations.of(context)!.warningContentTask)),
+      );
+      return;
+    }
+
+    final result = {
+      'task': _taskController.text.trim(),
+      'date': _selectedDate,
+      'time': _selectedTime,
+      'note': _note,
+      'status': widget.status,
+      'statusColor': widget.statusColors[widget.status],
+      'existingFolders': widget.selectedFolder?.id,
+    };
+
+    Navigator.of(context).pop(result);
+  }
+
   @override
   Widget build(BuildContext context) {
-    print("Folder được chọn là: ${widget.selectedFolder}");
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.close, color: Colors.black),
-        ),
         title: Text(
           widget.existingTask == null
               ? AppLocalizations.of(context)!.newTask
@@ -107,6 +170,10 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
             color: Colors.black,
             fontWeight: FontWeight.w500,
           ),
+        ),
+        leading: IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.close, color: Colors.black),
         ),
       ),
       body: Column(
@@ -263,94 +330,5 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
         ],
       ),
     );
-  }
-
-  Future<void> _selectDateTime(BuildContext context) async {
-    final DateTime? date = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-
-    if (date != null) {
-      final TimeOfDay? time = await showTimePicker(
-        context: context,
-        initialTime: _selectedTime,
-      );
-      if (time != null && mounted) {
-        setState(() {
-          _selectedDate = date;
-          _selectedTime = time;
-        });
-      }
-    }
-  }
-
-  Future<void> _selectStatus(BuildContext context) async {
-    final TaskStatus? status = await showDialog<TaskStatus>(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: Text(AppLocalizations.of(context)!.selectStatus),
-        children: TaskStatus.values.map((TaskStatus status) {
-          return SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, status),
-            child: Row(
-              children: [
-                Container(
-                  width: 16,
-                  height: 16,
-                  margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(
-                    color: widget.statusColors[status],
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                Text(
-                  status.toString().split('.').last.toUpperCase(),
-                  style: TextStyle(
-                    color: widget.statusColors[status],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
-    );
-
-    if (status != null && mounted) {
-      setState(() => widget.status = status);
-    }
-  }
-
-  void _handleTaskAction() {
-    if (widget.selectedFolder == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Please select a folder before creating a task'),
-        backgroundColor: Colors.red,
-      ));
-      return;
-    }
-    if (_taskController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(AppLocalizations.of(context)!.warningContentTask)),
-      );
-      return;
-    }
-
-    final result = {
-      'task': _taskController.text.trim(),
-      'date': _selectedDate,
-      'time': _selectedTime,
-      'note': _note,
-      'status': widget.status,
-      'statusColor': widget.statusColors[widget.status],
-      'existingFolders': widget.selectedFolder?.id,
-    };
-
-    Navigator.of(context).pop(result);
   }
 }

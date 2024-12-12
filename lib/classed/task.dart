@@ -1,5 +1,5 @@
-import 'package:todolist_app/main.dart';
-import 'package:todolist_app/task_status.dart';
+import 'package:todolist_app/classed/folder_data.dart';
+import 'package:todolist_app/utils/enum/enum.dart';
 
 class Task {
   String id;

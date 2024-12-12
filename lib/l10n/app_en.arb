@@ -44,8 +44,8 @@
   "selectStatus": "Select status",
   "warningContentTask": "You have input content task before create.",
   "emtyTask": "No task found.",
-  "exportExcelSuccess": "Export file task successfully.",
-  "exportExcelFailed": "Failed to export task",
+  "exportExcelSuccess": "Export file folder and task successfully.",
+  "exportExcelFailed": "Failed to export folder and task",
   "errorExportExecl": "Cannot create file excel.",
   "notFoundFolder": "Not found folder!",
   "emtyTaskExport": "No task found to export",
@@ -54,5 +54,12 @@
   "sampleFileExcel": "Folder sample excel created at \"{sampleFilePath}\"",
   "notFoundFolderFileExcel": "No folders found in the Excel file",
   "importFolder": "Imported \"{newFoldersLength}\" folder",
-  "importFailed": "Import Failed \"{e}\""
+  "importFailed": "Import Failed \"{e}\"",
+  "importExcel": "Import Excel",
+  "notifications": "Notification",
+  "exit": "Exit",
+  "menu": "Menu",
+  "selectFolderAndTask": "Select folder and task to export excel",
+  "selectTaskTo": "Select task to \"{selectedFolderTitle}\" :",
+  "selectTask": "Select task: "
 }

@@ -44,8 +44,8 @@
   "selectStatus": "Chọn trạng thái",
   "warningContentTask": "Bạn phải nhập nội dung công việc trước khi tạo.",
   "emtyTask": "Không có task ở đây, hãy tạo task mới",
-  "exportExcelSuccess": "Xuất công việc thành công.",
-  "exportExcelFailed": "Xuất công việc thất bại.",
+  "exportExcelSuccess": "Xuất thư mục và công việc thành công.",
+  "exportExcelFailed": "Xuất thư mục và công việc thất bại.",
   "errorExportExecl": "Không thể tạo file excel.",
   "notFoundFolder": "Không tìm thấy thư mục",
   "emtyTaskExport": "Không có công việc nào được xuất",
@@ -54,5 +54,11 @@
   "sampleFileExcel": "Thư mục excel mẫu được tạo tại \"{sampleFilePath}\"",
   "notFoundFolderFileExcel": "Không tìm thấy thư mục trong thư mục excel",
   "importFolder": "Nhập \"{newFoldersLength}\" thư mục",
-  "importFailed": "Nhập thất bại"
+  "importExcel": "Nhập Excel",
+  "notifications": "Thông báo",
+  "exit": "Thoát",
+  "menu": "Danh mục",
+  "selectFolderAndTask": "Chọn folder hoặc task để xuất excel",
+  "selectTaskTo": "Chọn thư mục từ \"{selectedFolderTitle}\" :",
+  "selectTask": "Chọn thư mục: "
 }

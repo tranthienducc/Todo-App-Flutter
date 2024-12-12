@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-import 'main.dart';
+import 'package:todolist_app/classed/folder_data.dart';
 
 class FolderCard extends StatelessWidget {
   final String title;

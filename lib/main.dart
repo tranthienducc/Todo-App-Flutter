@@ -2,94 +2,20 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:todolist_app/create_task_dialog.dart';
-import 'package:todolist_app/task.dart';
-import 'package:todolist_app/task_status.dart';
+import 'package:todolist_app/classed/folder_data.dart';
+import 'package:todolist_app/widgets/create_task_dialog.dart';
+import 'package:todolist_app/classed/task.dart';
+import 'package:todolist_app/utils/enum/enum.dart';
+import 'package:todolist_app/utils/index.dart';
+import 'package:todolist_app/widgets/create_folder_dialog.dart';
+import 'package:todolist_app/widgets/emty_state_widget.dart';
 
-import './animated_menu_button.dart';
-import './folder_card.dart';
-import './folder_detail_view.dart';
+import 'widgets/animated_menu_button.dart';
+import 'widgets/folder_card.dart';
+import 'widgets/folder_detail_view.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:todolist_app/l10n/l10n.dart';
-
-String iconToString(IconData icon) => icon.codePoint.toString();
-IconData stringToIcon(String iconString) =>
-    IconData(int.parse(iconString), fontFamily: 'MaterialIcons');
-String colorToString(Color color) => color.value.toString();
-Color stringToColor(String colorString) => Color(int.parse(colorString));
-
-class FolderData {
-  final String id;
-  final String title;
-  final IconData icon;
-  final Color color;
-  late final int tasks;
-  late List<Task>? taskLists;
-
-  FolderData({
-    required this.id,
-    required this.title,
-    required this.icon,
-    required this.color,
-    this.tasks = 0,
-    this.taskLists,
-  });
-
-  bool get isEmpty =>
-      id.isEmpty && title.isEmpty && (taskLists?.isEmpty ?? true);
-
-  bool get isNotEmpty => !isEmpty;
-  FolderData copyWith({
-    String? id,
-    String? title,
-    IconData? icon,
-    List<Task>? taskLists,
-    Color? color,
-    int? tasks,
-  }) {
-    return FolderData(
-      id: id ?? this.id,
-      title: title ?? this.title,
-      taskLists: taskLists ?? this.taskLists,
-      icon: icon ?? this.icon,
-      color: color ?? this.color,
-      tasks: tasks ?? this.tasks,
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'tasks': tasks,
-        'icon': iconToString(icon),
-        'taskLists': taskLists?.map((task) => task.toJson()).toList(),
-        'color': colorToString(color),
-      };
-
-  factory FolderData.fromJson(Map<String, dynamic> json) => FolderData(
-        id: json['id'],
-        title: json['title'],
-        icon: stringToIcon(json['icon']),
-        color: stringToColor(json['color']),
-        taskLists: json['taskLists'] != null
-            ? (json['taskLists'] as List)
-                .map((task) => Task.fromJson(task))
-                .toList()
-            : [],
-        tasks: json['tasks'] ?? 0,
-      );
-}
-
-enum ScreenType { mobile, tablet, desktop }
-
-ScreenType getScreenType(BuildContext context) {
-  final width = MediaQuery.of(context).size.width;
-  if (width >= 1024) return ScreenType.desktop;
-  if (width >= 600) return ScreenType.tablet;
-  return ScreenType.mobile;
-}
 
 Locale locale = const Locale('en');
 
@@ -108,268 +34,14 @@ class FolderListPage extends StatefulWidget {
   State<FolderListPage> createState() => _FolderListPageState();
 }
 
-class CreateFolderDialog extends StatefulWidget {
-  final FolderData? folderData;
-
-  const CreateFolderDialog({super.key, this.folderData});
-
-  @override
-  State<CreateFolderDialog> createState() => _CreateFolderDialogState();
-}
-
-class _CreateFolderDialogState extends State<CreateFolderDialog> {
-  late TextEditingController _nameController;
-  IconData _selectedIcon = Icons.folder;
-  Color _selectedColor = Colors.blue;
-
-  final List<IconData> _availableIcons = [
-    Icons.folder,
-    Icons.work,
-    Icons.music_note,
-    Icons.flight,
-    Icons.book,
-    Icons.home,
-    Icons.shopping_bag,
-    Icons.favorite,
-    Icons.sports_basketball,
-    Icons.movie,
-    Icons.restaurant,
-    Icons.fitness_center,
-  ];
-
-  final List<Color> _availableColors = [
-    Colors.blue,
-    Colors.red,
-    Colors.green,
-    Colors.orange,
-    Colors.purple,
-    Colors.pink,
-    Colors.teal,
-    Colors.indigo,
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(
-      text: widget.folderData?.title ?? '',
-    );
-    _selectedIcon = widget.folderData?.icon ?? Icons.folder;
-    _selectedColor = widget.folderData?.color ?? Colors.blue;
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: SingleChildScrollView(
-        child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.folderData == null
-                      ? AppLocalizations.of(context)!.createFolder
-                      : AppLocalizations.of(context)!.editFolder,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                TextField(
-                  controller: _nameController,
-                  decoration: InputDecoration(
-                    labelText: AppLocalizations.of(context)!.placeholderFolder,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    prefixIcon: Icon(
-                      _selectedIcon,
-                      color: _selectedColor,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  AppLocalizations.of(context)!.selectIcon,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  height: 90,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: GridView.builder(
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 6,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                    ),
-                    padding: const EdgeInsets.all(8),
-                    itemCount: _availableIcons.length,
-                    itemBuilder: (context, index) {
-                      final icon = _availableIcons[index];
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _selectedIcon = icon;
-                          });
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: icon == _selectedIcon
-                                ? _selectedColor.withOpacity(0.1)
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Center(
-                            child: Icon(
-                              icon,
-                              color: icon == _selectedIcon
-                                  ? _selectedColor
-                                  : Colors.grey,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  AppLocalizations.of(context)!.selectIcon,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 50,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _availableColors.length,
-                    itemBuilder: (context, index) {
-                      final color = _availableColors[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: InkWell(
-                          onTap: () {
-                            setState(() {
-                              _selectedColor = color;
-                            });
-                          },
-                          borderRadius: BorderRadius.circular(16),
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: color,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: color == _selectedColor
-                                    ? Colors.white
-                                    : Colors.transparent,
-                                width: 2,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: color.withOpacity(0.4),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
-                      child: Text(AppLocalizations.of(context)!.cancel),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      onPressed: () {
-                        if (_nameController.text.isNotEmpty) {
-                          Navigator.pop(
-                            context,
-                            FolderData(
-                              id: DateTime.now()
-                                  .millisecondsSinceEpoch
-                                  .toString(),
-                              title: _nameController.text,
-                              icon: _selectedIcon,
-                              color: _selectedColor,
-                              tasks: widget.folderData?.tasks ?? 0,
-                            ),
-                          );
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _selectedColor,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: Text(widget.folderData == null
-                          ? AppLocalizations.of(context)!.create
-                          : AppLocalizations.of(context)!.save),
-                    ),
-                  ],
-                ),
-              ],
-            )),
-      ),
-    );
-  }
-}
-
-Future<void> saveLocale(Locale locale) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString('locale', locale.languageCode);
-}
-
-Future<Locale> loadLocale() async {
-  final prefs = await SharedPreferences.getInstance();
-  final languageCode = prefs.getString('locale') ?? 'en';
-  return Locale(languageCode);
-}
-
 class _FolderListPageState extends State<FolderListPage> {
   List<FolderData> _folderLists = [];
   late int totalTasks = 0;
-  bool isMenuOpen = false;
   late List<Task> lateTasks = [];
   List<Task> todayTasks = [];
   late List<Task> doneTasks = [];
   FolderData? _selectedFolder;
+  late List<Task> taskList = [];
 
   @override
   void initState() {
@@ -621,40 +293,43 @@ class _FolderListPageState extends State<FolderListPage> {
     final screenType = getScreenType(context);
 
     return GestureDetector(
-      onTap: () {
-        if (isMenuOpen) {
-          setState(() {
-            isMenuOpen = false;
-          });
-        }
-      },
+      onTap: () {},
       child: Scaffold(
           backgroundColor: Colors.grey[100],
+          appBar: AppBar(
+            backgroundColor: Colors.grey[100],
+            leading: Builder(
+              builder: (context) {
+                return IconButton(
+                  icon: const Icon(Icons.menu),
+                  onPressed: () {
+                    Scaffold.of(context).openDrawer();
+                  },
+                );
+              },
+            ),
+          ),
+          drawer: AnimatedMenuButton(
+            lateTasks: lateTasks,
+            todayTasks: todayTasks,
+            doneTasks: doneTasks,
+            onFolderCreated: (folder) {
+              _addNewFolder(folder);
+              _loadFolders();
+            },
+            onFolderEdit: (folder) {
+              _loadFolders();
+            },
+            currentFolders: _folderLists,
+            folderLists: _folderLists,
+            taskList: taskList,
+          ),
           body: SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  AnimatedMenuButton(
-                    lateTasks: lateTasks,
-                    todayTasks: todayTasks,
-                    doneTasks: doneTasks,
-                    onFolderCreated: (folder) {
-                      _addNewFolder(folder);
-                      _loadFolders();
-                    },
-                    onFolderEdit: (folder) {
-                      _loadFolders();
-                    },
-                    currentFolders: _folderLists,
-                    onMenuToggle: (isOpen) {
-                      setState(() {
-                        isMenuOpen = isOpen;
-                      });
-                    },
-                    folderLists: _folderLists,
-                  ),
                   const SizedBox(height: 24),
                   Text(
                     AppLocalizations.of(context)!.listFolders,
@@ -666,22 +341,30 @@ class _FolderListPageState extends State<FolderListPage> {
                   const SizedBox(height: 24),
                   Expanded(
                     child: _folderLists.isEmpty
-                        ? _buildEmptyState()
+                        ? buildEmptyState()
                         : LayoutBuilder(
                             builder: (context, constraints) {
                               int crossAxisCount = 2;
+                              double cardWidth = 160.0;
+                              double cardHeight = 140.0;
+
                               if (screenType == ScreenType.tablet) {
                                 crossAxisCount = 3;
+                                cardWidth = 140.0;
+                                cardHeight = 100.0;
                               } else if (screenType == ScreenType.desktop) {
-                                crossAxisCount = 4;
+                                crossAxisCount = 6;
+                                cardWidth = 100.0;
+                                cardHeight = 60.0;
                               }
+
                               return GridView.builder(
                                 gridDelegate:
                                     SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: crossAxisCount,
                                   crossAxisSpacing: 16,
                                   mainAxisSpacing: 16,
-                                  childAspectRatio: 1.1,
+                                  childAspectRatio: cardWidth / cardHeight,
                                 ),
                                 itemCount: _folderLists.length,
                                 itemBuilder: (context, index) {
@@ -699,7 +382,7 @@ class _FolderListPageState extends State<FolderListPage> {
                               );
                             },
                           ),
-                  ),
+                  )
                 ],
               ),
             ),
@@ -735,50 +418,10 @@ class _FolderListPageState extends State<FolderListPage> {
               if (result != null) {
                 _addNewTask(result as Map<String, dynamic>, _selectedFolder!);
               }
-              print("Đây là kết quả khi tạo task $result");
             },
             backgroundColor: Colors.blue,
             child: const Icon(Icons.add),
           )),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Shimmer.fromColors(
-      baseColor: Colors.grey[300]!,
-      highlightColor: Colors.grey[100]!,
-      child: Container(
-        height: 60,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                color: Colors.white,
-              ),
-              const SizedBox(height: 16),
-              Container(
-                width: 120,
-                height: 20,
-                color: Colors.white,
-              ),
-              const Spacer(),
-              Container(
-                width: 80,
-                height: 16,
-                color: Colors.white,
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
