@@ -165,6 +165,152 @@ class _FolderDetailViewState extends State<FolderDetailView> {
     }
   }
 
+  Future<void> _moveTaskToFolder(FolderData targetFolder, Task task) async {
+    try {
+      FolderData allFolder = widget.folderLists.firstWhere(
+        (folder) => folder.title == "All",
+        orElse: () => widget.folder,
+      );
+
+      FolderData sourceFolder = widget.folder;
+
+      if (sourceFolder.id != allFolder.id) {
+        setState(() {
+          sourceFolder.taskLists?.removeWhere((t) => t.id == task.id);
+          sourceFolder = sourceFolder.copyWith(
+            taskLists: sourceFolder.taskLists,
+            tasks: sourceFolder.taskLists?.length ?? 0,
+          );
+        });
+        await widget.saveTasks(sourceFolder);
+      }
+
+      if (targetFolder.id != sourceFolder.id) {
+        setState(() {
+          targetFolder.taskLists ??= [];
+          targetFolder.taskLists?.removeWhere((t) => t.id == task.id);
+          targetFolder.taskLists?.add(task);
+          targetFolder = targetFolder.copyWith(
+            taskLists: targetFolder.taskLists,
+            tasks: targetFolder.taskLists?.length ?? 0,
+          );
+        });
+        await widget.saveTasks(targetFolder);
+      }
+
+      if (allFolder.id != targetFolder.id && allFolder.id != sourceFolder.id) {
+        setState(() {
+          allFolder.taskLists ??= [];
+          allFolder.taskLists?.removeWhere((t) => t.id == task.id);
+          if (shouldAddTaskToAllFolder(task, targetFolder)) {
+            allFolder.taskLists?.add(task);
+          }
+          allFolder = allFolder.copyWith(
+            taskLists: allFolder.taskLists,
+            tasks: allFolder.taskLists?.length ?? 0,
+          );
+        });
+        await widget.saveTasks(allFolder);
+      }
+
+      final updatedFolders = widget.folderLists.map((folder) {
+        if (folder.id == sourceFolder.id) return sourceFolder;
+        if (folder.id == targetFolder.id) return targetFolder;
+        if (folder.id == allFolder.id) return allFolder;
+        return folder;
+      }).toList();
+
+      await widget.saveFolders(updatedFolders);
+
+      await _loadTasks();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!.taskHasbeenMove(targetFolder.title),
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint("Error moving task: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Không thể di chuyển task")),
+      );
+    }
+  }
+
+  bool shouldAddTaskToAllFolder(Task task, FolderData targetFolder) {
+    return targetFolder.title == "All";
+  }
+
+  void showMoveTaskDialog(Task task) {
+    final availableFolders = widget.folderLists
+        .where((folder) =>
+            folder.id !=
+                widget.folder.id && // Không hiển thị chính folder hiện tại
+            folder.title != 'All') // Không hiển thị folder "All"
+        .toList();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(AppLocalizations.of(context)!.moveTaskToFolder),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: availableFolders.isNotEmpty
+                  ? availableFolders
+                      .map((folder) => ListTile(
+                            leading: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .primaryColor
+                                    .withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                folder.icon,
+                                color: Theme.of(context).primaryColor,
+                                size: 24,
+                              ),
+                            ),
+                            title: Text(folder.title),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _moveTaskToFolder(folder, task);
+                            },
+                          ))
+                      .toList()
+                  : [
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Text(
+                            'No folder found',
+                            style: TextStyle(
+                              color: Theme.of(context).hintColor,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(AppLocalizations.of(context)!.cancel),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
     Navigator.pop(context, widget.folder.tasks);
@@ -566,6 +712,7 @@ class _FolderDetailViewState extends State<FolderDetailView> {
                       folderLists: widget.folderLists,
                       folderWidget: widget.folder,
                       saveTasks: widget.saveTasks,
+                      showMoveTaskDialog: showMoveTaskDialog,
                       saveFolders: widget.saveFolders,
                       loadTasks: _loadTasks),
                   buildSection(
@@ -585,6 +732,7 @@ class _FolderDetailViewState extends State<FolderDetailView> {
                       folderLists: widget.folderLists,
                       folderWidget: widget.folder,
                       saveTasks: widget.saveTasks,
+                      showMoveTaskDialog: showMoveTaskDialog,
                       saveFolders: widget.saveFolders,
                       loadTasks: _loadTasks),
                   buildSection(
@@ -601,6 +749,7 @@ class _FolderDetailViewState extends State<FolderDetailView> {
                       statusColorsWidget: statusColors,
                       titleWidget: widget.title,
                       onSortTasks: handleSortTasks,
+                      showMoveTaskDialog: showMoveTaskDialog,
                       folderLists: widget.folderLists,
                       folderWidget: widget.folder,
                       saveTasks: widget.saveTasks,
