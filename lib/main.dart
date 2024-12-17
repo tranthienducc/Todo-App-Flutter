@@ -420,6 +420,7 @@ class _FolderListPageState extends State<FolderListPage> {
               }
             },
             backgroundColor: Colors.blue,
+            tooltip: AppLocalizations.of(context)!.newTask,
             child: const Icon(Icons.add),
           )),
     );
