@@ -5,26 +5,26 @@ import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:todolist_app/utils/enum/enum.dart';
 import 'package:todolist_app/widgets/task_widget.dart';
 
-Widget buildSection({
-  required String title,
-  required List<Task> tasks,
-  required List<FolderData> folderLists,
-  required BuildContext context,
-  required List<Task> lateTasksWidget,
-  required List<Task> todayTasksWidget,
-  required String titleWidget,
-  required FolderData folderWidget,
-  required List<Task> doneTasksWidget,
-  required Color colorWidget,
-  required Map<TaskStatus, Color> statusColorsWidget,
-  required void Function(Task) editTask,
-  required void Function(Task) deleteTask,
-  required void Function(Task, bool?) handleTaskToggle,
-  required void Function(String, List<Task>) onSortTasks,
-  required Function saveTasks,
-  required Function saveFolders,
-  required Function loadTasks,
-}) {
+Widget buildSection(
+    {required String title,
+    required List<Task> tasks,
+    required List<FolderData> folderLists,
+    required BuildContext context,
+    required List<Task> lateTasksWidget,
+    required List<Task> todayTasksWidget,
+    required String titleWidget,
+    required FolderData folderWidget,
+    required List<Task> doneTasksWidget,
+    required Color colorWidget,
+    required Map<TaskStatus, Color> statusColorsWidget,
+    required void Function(Task) editTask,
+    required void Function(Task) deleteTask,
+    required void Function(Task, bool?) handleTaskToggle,
+    required void Function(String, List<Task>) onSortTasks,
+    required Function saveTasks,
+    required Function saveFolders,
+    required Function loadTasks,
+    required Function showMoveTaskDialog}) {
   if (title == AppLocalizations.of(context)!.late) {
     tasks = lateTasksWidget;
   } else if (title == AppLocalizations.of(context)!.today) {
@@ -86,6 +86,7 @@ Widget buildSection({
                       loadTasks: loadTasks,
                       saveFolders: saveFolders,
                       saveTasks: saveTasks,
+                      showMoveTaskDialog: showMoveTaskDialog,
                       folderLists: folderLists,
                       folderWidget: folderWidget))
                   .toList())
