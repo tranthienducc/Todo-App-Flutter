@@ -4,7 +4,6 @@ import 'package:todolist_app/classed/folder_data.dart';
 import 'package:todolist_app/classed/task.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:todolist_app/utils/enum/enum.dart';
-import 'package:todolist_app/widgets/move_task_dialog.dart';
 
 Widget buildTask(
     {required void Function(Task) deleteTask,
@@ -20,6 +19,7 @@ Widget buildTask(
     required Function saveTasks,
     required Function saveFolders,
     required Function loadTasks,
+    required Function showMoveTaskDialog,
     required String section}) {
   return Padding(
     padding: const EdgeInsets.only(bottom: 10),
@@ -83,14 +83,7 @@ Widget buildTask(
           IconButton(
             icon: const Icon(Icons.move_to_inbox),
             color: folderColor,
-            onPressed: () => showMoveTaskDialog(
-                task: task,
-                context: context,
-                folderLists: folderLists,
-                folderWidget: folderWidget,
-                loadTasks: loadTasks,
-                saveFolders: saveFolders,
-                saveTasks: saveTasks),
+            onPressed: () => showMoveTaskDialog(task),
           ),
         IconButton(
           icon: const Icon(Icons.edit),
